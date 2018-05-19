@@ -1,8 +1,8 @@
-name: primitive-class
+name: contiguous
 version: 0.1.0.0
 description: Please see the README on GitHub
-homepage: https://github.com/andrewthad/primitive-class
-bug-reports: https://github.com/andrewthad/primitive-class/issues
+homepage: https://github.com/andrewthad/contiguous
+bug-reports: https://github.com/andrewthad/contiguous/issues
 author: Andrew Martin
 maintainer: andrew.thaddeus@gmail.com
 copyright: 2018 Andrew Martin
@@ -14,7 +14,7 @@ extra-source-files: README.md
 
 source-repository head
   type: git
-  location: https://github.com/andrewthad/primitive-class
+  location: https://github.com/andrewthad/contiguous
 
 library
   exposed-modules:
