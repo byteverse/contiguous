@@ -29,6 +29,7 @@ import qualified Prelude as P
 class Always a
 instance Always a
 
+-- | A contiguous array of elements.
 class Contiguous (arr :: Type -> Type) where
   type family Mutable arr = (r :: Type -> Type -> Type) | r -> arr
   type family Element arr :: Type -> Constraint
@@ -41,8 +42,12 @@ class Contiguous (arr :: Type -> Type) where
   write :: Element arr b => Mutable arr s b -> Int -> b -> ST s ()
   resize :: Element arr b => Mutable arr s b -> Int -> ST s (Mutable arr s b)
   size :: Element arr b => arr b -> Int
+  sizeMutable :: Element arr b => Mutable arr s b -> ST s Int
   unsafeFreeze :: Mutable arr s b -> ST s (arr b)
   copy :: Element arr b => Mutable arr s b -> Int -> arr b -> Int -> Int -> ST s ()
+  copyMutable :: Element arr b => Mutable arr s b -> Int -> Mutable arr s b -> Int -> Int -> ST s ()
+  clone :: Element arr b => arr b -> Int -> Int -> arr b
+  cloneMutable :: Element arr b => Mutable arr s b -> Int -> Int -> ST s (Mutable arr s b)
   foldr :: Element arr b => (b -> c -> c) -> c -> arr b -> c
   equals :: (Element arr b, Eq b) => arr b -> arr b -> Bool
   unlift :: arr b -> ArrayArray#
@@ -60,8 +65,12 @@ instance Contiguous PrimArray where
   write = writePrimArray
   resize = resizeMutablePrimArray
   size = sizeofPrimArray
+  sizeMutable = getSizeofMutablePrimArray
   unsafeFreeze = unsafeFreezePrimArray
   copy = copyPrimArray
+  copyMutable = copyMutablePrimArray
+  clone = clonePrimArray
+  cloneMutable = cloneMutablePrimArray
   foldr = foldrPrimArray
   equals = (==)
   unlift = toArrayArray#
@@ -79,8 +88,12 @@ instance Contiguous Array where
   write = writeArray
   resize = resizeArray
   size = sizeofArray
+  sizeMutable = pure . sizeofMutableArray
   unsafeFreeze = unsafeFreezeArray
   copy = copyArray
+  copyMutable = copyMutableArray
+  clone = cloneArray
+  cloneMutable = cloneMutableArray
   foldr = P.foldr
   equals = (==)
   unlift = toArrayArray#
@@ -98,8 +111,12 @@ instance Contiguous UnliftedArray where
   write = writeUnliftedArray
   resize = resizeUnliftedArray
   size = sizeofUnliftedArray
+  sizeMutable = pure . sizeofMutableUnliftedArray
   unsafeFreeze = unsafeFreezeUnliftedArray
   copy = copyUnliftedArray
+  copyMutable = copyMutableUnliftedArray
+  clone = cloneUnliftedArray
+  cloneMutable = cloneMutableUnliftedArray
   foldr = foldrUnliftedArray
   equals = (==)
   unlift = toArrayArray#
@@ -114,15 +131,18 @@ resizeArray !src !sz = do
   dst <- newArray sz errorThunk
   copyMutableArray dst 0 src 0 (min sz (sizeofMutableArray src))
   return dst
+{-# INLINE resizeArray #-}
 
 resizeUnliftedArray :: PrimUnlifted a => MutableUnliftedArray s a -> Int -> ST s (MutableUnliftedArray s a)
 resizeUnliftedArray !src !sz = do
   dst <- unsafeNewUnliftedArray sz
   copyMutableUnliftedArray dst 0 src 0 (min sz (sizeofMutableUnliftedArray src))
   return dst
+{-# INLINE resizeUnliftedArray #-}
 
 emptyUnliftedArray :: UnliftedArray a
 emptyUnliftedArray = runST (unsafeNewUnliftedArray 0 >>= unsafeFreezeUnliftedArray)
+{-# NOINLINE emptyUnliftedArray #-}
 
 
 map :: (Contiguous arr, Element arr b, Element arr c) => (b -> c) -> arr b -> arr c
@@ -168,4 +188,18 @@ foldMap' f !ary =
       | (# x #) <- index# ary i = go (i+1) (mappend acc (f x))
   in go 0 mempty
 {-# INLINABLE foldMap' #-}
+
+clonePrimArray :: Prim a => PrimArray a -> Int -> Int -> PrimArray a
+clonePrimArray !arr !off !len = runST $ do
+  marr <- newPrimArray len
+  copyPrimArray marr 0 arr off len
+  unsafeFreezePrimArray marr
+{-# INLINE clonePrimArray #-}
+
+cloneMutablePrimArray :: Prim a => MutablePrimArray s a -> Int -> Int -> ST s (MutablePrimArray s a)
+cloneMutablePrimArray !arr !off !len = do
+  marr <- newPrimArray len
+  copyMutablePrimArray marr 0 arr off len
+  return marr
+{-# INLINE cloneMutablePrimArray #-}
 
