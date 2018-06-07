@@ -6,7 +6,7 @@ bug-reports: https://github.com/andrewthad/contiguous/issues
 author: Andrew Martin
 maintainer: andrew.thaddeus@gmail.com
 copyright: 2018 Andrew Martin
-license: BSD-3-Clause
+license: BSD3
 license-file: LICENSE
 build-type: Simple
 extra-source-files: README.md
