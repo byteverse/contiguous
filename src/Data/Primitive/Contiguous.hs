@@ -13,6 +13,7 @@ module Data.Primitive.Contiguous
   , Always
   , map
   , foldr
+  , foldMap
   , foldl'
   , foldr'
   , foldMap'
@@ -21,7 +22,7 @@ module Data.Primitive.Contiguous
   , unsafeFromListReverseN
   ) where
 
-import Prelude hiding (map,foldr)
+import Prelude hiding (map,foldr,foldMap)
 import Control.Monad.ST (ST,runST)
 import Data.Kind (Type)
 import Data.Primitive
@@ -186,6 +187,17 @@ foldr' f !z !ary =
       = go (i-1) (f x acc)
   in go (size ary - 1) z
 {-# INLINABLE foldr' #-}
+
+-- | Monoidal fold over the element of an array.
+foldMap :: (Contiguous arr, Element arr a, Monoid m) => (a -> m) -> arr a -> m
+foldMap f arr = go 0
+  where
+    !sz = size arr
+    go !i
+      | sz > i = case index# arr i of
+          (# x #) -> mappend (f x) (go (i+1))
+      | otherwise = mempty
+{-# INLINABLE foldMap #-}
 
 -- | Strict monoidal fold over the elements of an array.
 foldMap' :: (Contiguous arr, Element arr a, Monoid m)
