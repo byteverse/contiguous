@@ -18,6 +18,8 @@ module Data.Primitive.Contiguous
   , foldr'
   , foldMap'
   , foldlM'
+  , traverse_
+  , itraverse_
   , unsafeFromListN
   , unsafeFromListReverseN
   ) where
@@ -269,3 +271,28 @@ unsafeFromListReverseN n l = runST $ do
         go (ix-1) xs
   go (n - 1) l
   unsafeFreeze m
+
+traverse_ ::
+     (Contiguous arr, Element arr a, Applicative f)
+  => (a -> f b)
+  -> arr a
+  -> f ()
+traverse_ f a = go 0 where
+  !sz = size a
+  go !ix = if ix < sz
+    then f (index a ix) *> go (ix + 1)
+    else pure ()
+{-# INLINABLE traverse_ #-}
+
+itraverse_ ::
+     (Contiguous arr, Element arr a, Applicative f)
+  => (Int -> a -> f b)
+  -> arr a
+  -> f ()
+itraverse_ f a = go 0 where
+  !sz = size a
+  go !ix = if ix < sz
+    then f ix (index a ix) *> go (ix + 1)
+    else pure ()
+{-# INLINABLE itraverse_ #-}
+
