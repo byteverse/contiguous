@@ -28,7 +28,7 @@ import Prelude hiding (map,foldr,foldMap)
 import Control.Monad.ST (ST,runST)
 import Data.Kind (Type)
 import Data.Primitive
-import GHC.Exts (ArrayArray#,Constraint)
+import GHC.Exts (ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#)
 
 class Always a
 instance Always a
@@ -38,7 +38,9 @@ class Contiguous (arr :: Type -> Type) where
   type family Mutable arr = (r :: Type -> Type -> Type) | r -> arr
   type family Element arr :: Type -> Constraint
   empty :: arr a
+  null :: arr b -> Bool
   new :: Element arr b => Int -> ST s (Mutable arr s b)
+  replicateM :: Element arr b => Int -> b -> ST s (Mutable arr s b)
   index :: Element arr b => arr b -> Int -> b
   index# :: Element arr b => arr b -> Int -> (# b #)
   indexM :: (Element arr b, Monad m) => arr b -> Int -> m b
@@ -61,6 +63,7 @@ instance Contiguous PrimArray where
   type Element PrimArray = Prim
   empty = mempty
   new = newPrimArray
+  replicateM = replicatePrimArrayM
   index = indexPrimArray
   index# arr ix = (# indexPrimArray arr ix #)
   indexM arr ix = return (indexPrimArray arr ix)
@@ -77,12 +80,16 @@ instance Contiguous PrimArray where
   equals = (==)
   unlift = toArrayArray#
   lift = fromArrayArray#
+  null (PrimArray a) = case sizeofByteArray# a of
+    0# -> True
+    _ -> False
 
 instance Contiguous Array where
   type Mutable Array = MutableArray
   type Element Array = Always
   empty = mempty
   new n = newArray n errorThunk
+  replicateM = newArray
   index = indexArray
   index# = indexArray##
   indexM = indexArrayM
@@ -99,12 +106,16 @@ instance Contiguous Array where
   equals = (==)
   unlift = toArrayArray#
   lift = fromArrayArray#
+  null (Array a) = case sizeofArray# a of
+    0# -> True
+    _ -> False
 
 instance Contiguous UnliftedArray where
   type Mutable UnliftedArray = MutableUnliftedArray
   type Element UnliftedArray = PrimUnlifted
   empty = emptyUnliftedArray
   new = unsafeNewUnliftedArray
+  replicateM = newUnliftedArray
   index = indexUnliftedArray
   index# arr ix = (# indexUnliftedArray arr ix #)
   indexM arr ix = return (indexUnliftedArray arr ix)
@@ -121,6 +132,9 @@ instance Contiguous UnliftedArray where
   equals = (==)
   unlift = toArrayArray#
   lift = fromArrayArray#
+  null (UnliftedArray a) = case sizeofArrayArray# a of
+    0# -> True
+    _ -> False
 
 errorThunk :: a
 errorThunk = error "Contiguous typeclass: unitialized element"
@@ -239,6 +253,16 @@ cloneMutablePrimArray !arr !off !len = do
   copyMutablePrimArray marr 0 arr off len
   return marr
 {-# INLINE cloneMutablePrimArray #-}
+
+replicatePrimArrayM :: Prim a
+  => Int -- ^ length
+  -> a -- ^ element
+  -> ST s (MutablePrimArray s a)
+replicatePrimArrayM len a = do
+  marr <- newPrimArray len
+  setPrimArray marr 0 len a
+  return marr
+{-# INLINE replicatePrimArrayM #-}
 
 -- | Create an array from a list. If the given length does
 -- not match the actual length, this function has undefined
