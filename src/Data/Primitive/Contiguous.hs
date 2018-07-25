@@ -159,7 +159,7 @@ emptyUnliftedArray = runST (unsafeNewUnliftedArray 0 >>= unsafeFreezeUnliftedArr
 {-# NOINLINE emptyUnliftedArray #-}
 
 -- | Map over the elements of an array.
-map :: (Contiguous arr, Element arr b, Element arr c) => (b -> c) -> arr b -> arr c
+map :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (b -> c) -> arr1 b -> arr2 c
 map f a = runST $ do
   mb <- new (size a)
   let go !i
