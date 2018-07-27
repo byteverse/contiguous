@@ -22,10 +22,12 @@ module Data.Primitive.Contiguous
   , itraverse_
   , unsafeFromListN
   , unsafeFromListReverseN
+  , liftHashWithSalt
   ) where
 
 import Prelude hiding (map,foldr,foldMap)
 import Control.Monad.ST (ST,runST)
+import Data.Bits (xor)
 import Data.Kind (Type)
 import Data.Primitive
 import GHC.Exts (ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#)
@@ -319,4 +321,25 @@ itraverse_ f a = go 0 where
     then f ix (index a ix) *> go (ix + 1)
     else pure ()
 {-# INLINABLE itraverse_ #-}
+
+liftHashWithSalt :: (Contiguous arr, Element arr a)
+  => (Int -> a -> Int)
+  -> Int
+  -> arr a
+  -> Int
+liftHashWithSalt f s0 arr = go 0 s0 where
+  sz = size arr
+  go !ix !s = if ix < sz
+    then 
+      let !(# x #) = index# arr ix
+       in go (ix + 1) (f s x)
+    else hashIntWithSalt s ix
+{-# INLINABLE liftHashWithSalt #-}
+
+hashIntWithSalt :: Int -> Int -> Int
+hashIntWithSalt salt x = salt `combine` x
+
+combine :: Int -> Int -> Int
+combine h1 h2 = (h1 * 16777619) `xor` h2
+
 
