@@ -23,6 +23,7 @@ module Data.Primitive.Contiguous
   , unsafeFromListN
   , unsafeFromListReverseN
   , liftHashWithSalt
+  , same
   ) where
 
 import Prelude hiding (map,foldr,foldMap)
@@ -30,7 +31,7 @@ import Control.Monad.ST (ST,runST)
 import Data.Bits (xor)
 import Data.Kind (Type)
 import Data.Primitive
-import GHC.Exts (ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#)
+import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#)
 
 class Always a
 instance Always a
@@ -59,6 +60,7 @@ class Contiguous (arr :: Type -> Type) where
   equals :: (Element arr b, Eq b) => arr b -> arr b -> Bool
   unlift :: arr b -> ArrayArray#
   lift :: ArrayArray# -> arr b
+  sameMutable :: Mutable arr s a -> Mutable arr s a -> Bool
 
 instance Contiguous PrimArray where
   type Mutable PrimArray = MutablePrimArray
@@ -85,6 +87,7 @@ instance Contiguous PrimArray where
   null (PrimArray a) = case sizeofByteArray# a of
     0# -> True
     _ -> False
+  sameMutable = sameMutablePrimArray
 
 instance Contiguous Array where
   type Mutable Array = MutableArray
@@ -111,6 +114,7 @@ instance Contiguous Array where
   null (Array a) = case sizeofArray# a of
     0# -> True
     _ -> False
+  sameMutable = sameMutableArray
 
 instance Contiguous UnliftedArray where
   type Mutable UnliftedArray = MutableUnliftedArray
@@ -137,6 +141,7 @@ instance Contiguous UnliftedArray where
   null (UnliftedArray a) = case sizeofArrayArray# a of
     0# -> True
     _ -> False
+  sameMutable = sameMutableUnliftedArray
 
 errorThunk :: a
 errorThunk = error "Contiguous typeclass: unitialized element"
@@ -335,6 +340,14 @@ liftHashWithSalt f s0 arr = go 0 s0 where
        in go (ix + 1) (f s x)
     else hashIntWithSalt s ix
 {-# INLINABLE liftHashWithSalt #-}
+
+-- | This function does not behave deterministically. Optimization level and
+-- inlining can affect its results. However, the one thing that can be counted
+-- on is that if it returns @True@, the two immutable arrays are definitely the
+-- same. This is useful as shortcut for equality tests. However, keep in mind
+-- that a result of @False@ tells us nothing about the arguments.
+same :: Contiguous arr => arr a -> arr a -> Bool
+same a b = isTrue# (sameMutableArrayArray# (unsafeCoerce# (unlift a) :: MutableArrayArray# s) (unsafeCoerce# (unlift b) :: MutableArrayArray# s))
 
 hashIntWithSalt :: Int -> Int -> Int
 hashIntWithSalt salt x = salt `combine` x
