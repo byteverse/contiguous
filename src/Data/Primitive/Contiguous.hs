@@ -32,6 +32,9 @@ import Data.Bits (xor)
 import Data.Kind (Type)
 import Data.Primitive
 import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#)
+import Control.DeepSeq (NFData)
+
+import qualified Control.DeepSeq as DS
 
 class Always a
 instance Always a
@@ -61,6 +64,7 @@ class Contiguous (arr :: Type -> Type) where
   unlift :: arr b -> ArrayArray#
   lift :: ArrayArray# -> arr b
   sameMutable :: Mutable arr s a -> Mutable arr s a -> Bool
+  rnf :: (NFData a, Element arr a) => arr a -> ()
 
 instance Contiguous PrimArray where
   type Mutable PrimArray = MutablePrimArray
@@ -88,6 +92,7 @@ instance Contiguous PrimArray where
     0# -> True
     _ -> False
   sameMutable = sameMutablePrimArray
+  rnf (PrimArray !_) = ()
 
 instance Contiguous Array where
   type Mutable Array = MutableArray
@@ -115,6 +120,14 @@ instance Contiguous Array where
     0# -> True
     _ -> False
   sameMutable = sameMutableArray
+  rnf !ary = 
+    let !sz = sizeofArray ary
+        go !i
+          | i == sz = ()
+          | otherwise =
+              let !(# x #) = indexArray## ary i
+               in DS.rnf x `seq` go (i+1)
+     in go 0
 
 instance Contiguous UnliftedArray where
   type Mutable UnliftedArray = MutableUnliftedArray
@@ -142,6 +155,14 @@ instance Contiguous UnliftedArray where
     0# -> True
     _ -> False
   sameMutable = sameMutableUnliftedArray
+  rnf !ary = 
+    let !sz = sizeofUnliftedArray ary
+        go !i
+          | i == sz = ()
+          | otherwise =
+              let x = indexUnliftedArray ary i
+               in DS.rnf x `seq` go (i+1)
+     in go 0
 
 errorThunk :: a
 errorThunk = error "Contiguous typeclass: unitialized element"
