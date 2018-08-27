@@ -27,7 +27,8 @@ module Data.Primitive.Contiguous
   ) where
 
 import Prelude hiding (map,foldr,foldMap)
-import Control.Monad.ST (ST,runST)
+import Control.Monad.ST (runST)
+import Control.Monad.Primitive
 import Data.Bits (xor)
 import Data.Kind (Type)
 import Data.Primitive
@@ -45,21 +46,21 @@ class Contiguous (arr :: Type -> Type) where
   type family Element arr :: Type -> Constraint
   empty :: arr a
   null :: arr b -> Bool
-  new :: Element arr b => Int -> ST s (Mutable arr s b)
-  replicateM :: Element arr b => Int -> b -> ST s (Mutable arr s b)
+  new :: (PrimMonad m, Element arr b) => Int -> m (Mutable arr (PrimState m) b)
+  replicateM :: (PrimMonad m, Element arr b) => Int -> b -> m (Mutable arr (PrimState m) b)
   index :: Element arr b => arr b -> Int -> b
   index# :: Element arr b => arr b -> Int -> (# b #)
   indexM :: (Element arr b, Monad m) => arr b -> Int -> m b
-  read :: Element arr b => Mutable arr s b -> Int -> ST s b
-  write :: Element arr b => Mutable arr s b -> Int -> b -> ST s ()
-  resize :: Element arr b => Mutable arr s b -> Int -> ST s (Mutable arr s b)
+  read :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> m b
+  write :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> b -> m ()
+  resize :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> m (Mutable arr (PrimState m) b)
   size :: Element arr b => arr b -> Int
-  sizeMutable :: Element arr b => Mutable arr s b -> ST s Int
-  unsafeFreeze :: Mutable arr s b -> ST s (arr b)
-  copy :: Element arr b => Mutable arr s b -> Int -> arr b -> Int -> Int -> ST s ()
-  copyMutable :: Element arr b => Mutable arr s b -> Int -> Mutable arr s b -> Int -> Int -> ST s ()
+  sizeMutable :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> m Int
+  unsafeFreeze :: PrimMonad m => Mutable arr (PrimState m) b -> m (arr b)
+  copy :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> arr b -> Int -> Int -> m ()
+  copyMutable :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> Mutable arr (PrimState m) b -> Int -> Int -> m ()
   clone :: Element arr b => arr b -> Int -> Int -> arr b
-  cloneMutable :: Element arr b => Mutable arr s b -> Int -> Int -> ST s (Mutable arr s b)
+  cloneMutable :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> Int -> m (Mutable arr (PrimState m) b)
   equals :: (Element arr b, Eq b) => arr b -> arr b -> Bool
   unlift :: arr b -> ArrayArray#
   lift :: ArrayArray# -> arr b
@@ -168,14 +169,14 @@ errorThunk :: a
 errorThunk = error "Contiguous typeclass: unitialized element"
 {-# NOINLINE errorThunk #-}
 
-resizeArray :: Always a => MutableArray s a -> Int -> ST s (MutableArray s a)
+resizeArray :: (PrimMonad m, Always a) => MutableArray (PrimState m) a -> Int -> m (MutableArray (PrimState m) a)
 resizeArray !src !sz = do
   dst <- newArray sz errorThunk
   copyMutableArray dst 0 src 0 (min sz (sizeofMutableArray src))
   return dst
 {-# INLINE resizeArray #-}
 
-resizeUnliftedArray :: PrimUnlifted a => MutableUnliftedArray s a -> Int -> ST s (MutableUnliftedArray s a)
+resizeUnliftedArray :: (PrimMonad m, PrimUnlifted a) => MutableUnliftedArray (PrimState m) a -> Int -> m (MutableUnliftedArray (PrimState m) a)
 resizeUnliftedArray !src !sz = do
   dst <- unsafeNewUnliftedArray sz
   copyMutableUnliftedArray dst 0 src 0 (min sz (sizeofMutableUnliftedArray src))
@@ -275,17 +276,17 @@ clonePrimArray !arr !off !len = runST $ do
   unsafeFreezePrimArray marr
 {-# INLINE clonePrimArray #-}
 
-cloneMutablePrimArray :: Prim a => MutablePrimArray s a -> Int -> Int -> ST s (MutablePrimArray s a)
+cloneMutablePrimArray :: (PrimMonad m, Prim a) => MutablePrimArray (PrimState m) a -> Int -> Int -> m (MutablePrimArray (PrimState m) a)
 cloneMutablePrimArray !arr !off !len = do
   marr <- newPrimArray len
   copyMutablePrimArray marr 0 arr off len
   return marr
 {-# INLINE cloneMutablePrimArray #-}
 
-replicatePrimArrayM :: Prim a
+replicatePrimArrayM :: (PrimMonad m, Prim a)
   => Int -- ^ length
   -> a -- ^ element
-  -> ST s (MutablePrimArray s a)
+  -> m (MutablePrimArray (PrimState m) a)
 replicatePrimArrayM len a = do
   marr <- newPrimArray len
   setPrimArray marr 0 len a
