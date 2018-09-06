@@ -169,7 +169,7 @@ errorThunk :: a
 errorThunk = error "Contiguous typeclass: unitialized element"
 {-# NOINLINE errorThunk #-}
 
-resizeArray :: (PrimMonad m, Always a) => MutableArray (PrimState m) a -> Int -> m (MutableArray (PrimState m) a)
+resizeArray :: PrimMonad m => MutableArray (PrimState m) a -> Int -> m (MutableArray (PrimState m) a)
 resizeArray !src !sz = do
   dst <- newArray sz errorThunk
   copyMutableArray dst 0 src 0 (min sz (sizeofMutableArray src))
