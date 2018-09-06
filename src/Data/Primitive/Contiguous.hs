@@ -37,6 +37,8 @@ import Control.DeepSeq (NFData)
 
 import qualified Control.DeepSeq as DS
 
+-- | A typeclass that is satisfied by all types. This is used
+-- used to provide a fake constraint for 'Array' and 'SmallArray'.
 class Always a
 instance Always a
 
