@@ -11,13 +11,20 @@
 module Data.Primitive.Contiguous
   ( Contiguous(..)
   , Always
+  , append
   , map
+  , map'
+  , imap
+  , mapMutable'
+  , imapMutable'
   , foldr
   , foldMap
   , foldl'
   , foldr'
   , foldMap'
   , foldlM'
+  , traverse
+  , traverseP
   , traverse_
   , itraverse_
   , unsafeFromListN
@@ -26,9 +33,10 @@ module Data.Primitive.Contiguous
   , same
   ) where
 
-import Prelude hiding (map,foldr,foldMap)
-import Control.Monad.ST (runST)
+import Prelude hiding (map,foldr,foldMap,traverse,read)
+import Control.Monad.ST (runST,ST)
 import Control.Monad.Primitive
+import Control.Applicative (liftA2)
 import Data.Bits (xor)
 import Data.Kind (Type)
 import Data.Primitive
@@ -67,6 +75,9 @@ class Contiguous (arr :: Type -> Type) where
   unlift :: arr b -> ArrayArray#
   lift :: ArrayArray# -> arr b
   sameMutable :: Mutable arr s a -> Mutable arr s a -> Bool
+  singleton :: Element arr a => a -> arr a
+  doubleton :: Element arr a => a -> a -> arr a
+  tripleton :: Element arr a => a -> a -> a -> arr a
   rnf :: (NFData a, Element arr a) => arr a -> ()
 
 instance Contiguous PrimArray where
@@ -96,6 +107,21 @@ instance Contiguous PrimArray where
     _ -> False
   sameMutable = sameMutablePrimArray
   rnf (PrimArray !_) = ()
+  singleton a = runST $ do
+    marr <- newPrimArray 1
+    writePrimArray marr 0 a
+    unsafeFreezePrimArray marr
+  doubleton a b = runST $ do
+    m <- newPrimArray 2
+    writePrimArray m 0 a
+    writePrimArray m 1 b
+    unsafeFreezePrimArray m
+  tripleton a b c = runST $ do
+    m <- newPrimArray 3
+    writePrimArray m 0 a
+    writePrimArray m 1 b
+    writePrimArray m 2 c
+    unsafeFreezePrimArray m
 
 instance Contiguous Array where
   type Mutable Array = MutableArray
@@ -131,6 +157,16 @@ instance Contiguous Array where
               let !(# x #) = indexArray## ary i
                in DS.rnf x `seq` go (i+1)
      in go 0
+  singleton a = runST (newArray 1 a >>= unsafeFreezeArray)
+  doubleton a b = runST $ do
+    m <- newArray 2 a
+    writeArray m 1 b
+    unsafeFreezeArray m
+  tripleton a b c = runST $ do
+    m <- newArray 3 a
+    writeArray m 1 b
+    writeArray m 2 c
+    unsafeFreezeArray m
 
 instance Contiguous UnliftedArray where
   type Mutable UnliftedArray = MutableUnliftedArray
@@ -166,6 +202,16 @@ instance Contiguous UnliftedArray where
               let x = indexUnliftedArray ary i
                in DS.rnf x `seq` go (i+1)
      in go 0
+  singleton a = runST (newUnliftedArray 1 a >>= unsafeFreezeUnliftedArray)
+  doubleton a b = runST $ do
+    m <- newUnliftedArray 2 a
+    writeUnliftedArray m 1 b
+    unsafeFreezeUnliftedArray m
+  tripleton a b c = runST $ do
+    m <- newUnliftedArray 3 a
+    writeUnliftedArray m 1 b
+    writeUnliftedArray m 2 c
+    unsafeFreezeUnliftedArray m
 
 errorThunk :: a
 errorThunk = error "Contiguous typeclass: unitialized element"
@@ -189,6 +235,30 @@ emptyUnliftedArray :: UnliftedArray a
 emptyUnliftedArray = runST (unsafeNewUnliftedArray 0 >>= unsafeFreezeUnliftedArray)
 {-# NOINLINE emptyUnliftedArray #-}
 
+append :: (Contiguous arr, Element arr a) => arr a -> arr a -> arr a
+append !a !b = runST $ do
+  let !szA = size a
+  let !szB = size b
+  m <- new (szA + szB)
+  copy m 0 a 0 szA
+  copy m szA b 0 szB
+  unsafeFreeze m
+{-# INLINABLE append #-}
+
+-- | Map over the elements of an array with the index.
+imap :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (Int -> b -> c) -> arr1 b -> arr2 c
+imap f a = runST $ do
+  mb <- new (size a)
+  let go !i
+        | i == size a = return ()
+        | otherwise = do
+            x <- indexM a i
+            write mb i (f i x)
+            go (i+1)
+  go 0
+  unsafeFreeze mb
+{-# INLINABLE imap #-}
+
 -- | Map over the elements of an array.
 map :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (b -> c) -> arr1 b -> arr2 c
 map f a = runST $ do
@@ -202,6 +272,21 @@ map f a = runST $ do
   go 0
   unsafeFreeze mb
 {-# INLINABLE map #-}
+
+-- | Map strictly over the elements of an array.
+map' :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (b -> c) -> arr1 b -> arr2 c
+map' f a = runST $ do
+  mb <- new (size a)
+  let go !i
+        | i == size a = return ()
+        | otherwise = do
+            x <- indexM a i
+            let !b = f x
+            write mb i b
+            go (i+1)
+  go 0
+  unsafeFreeze mb
+{-# INLINABLE map' #-}
 
 -- | Right fold over the element of an array.
 foldr :: (Contiguous arr, Element arr a) => (a -> b -> b) -> b -> arr a -> b
@@ -326,6 +411,80 @@ unsafeFromListReverseN n l = runST $ do
         go (ix-1) xs
   go (n - 1) l
   unsafeFreeze m
+
+-- | Strictly map over a mutable array, modifying the elements in place.
+mapMutable' :: (PrimMonad m, Contiguous arr, Element arr a)
+  => (a -> a)
+  -> Mutable arr (PrimState m) a
+  -> m ()
+mapMutable' f = \ !mary -> do
+  !sz <- sizeMutable mary
+  let
+    go !i
+      | i == sz = pure ()
+      | otherwise = do
+          a <- read mary i
+          let !b = f a
+          write mary i b
+          go (i + 1)
+  go 0
+
+-- | Strictly map over a mutable array with indices, modifying the elements in place.
+imapMutable' :: (PrimMonad m, Contiguous arr, Element arr a)
+  => (Int -> a -> a)
+  -> Mutable arr (PrimState m) a
+  -> m ()
+imapMutable' f = \ !mary -> do
+  !sz <- sizeMutable mary
+  let
+    go !i
+      | i == sz = pure ()
+      | otherwise = do
+          a <- read mary i
+          let !b = f i a
+          write mary i b
+          go (i + 1)
+  go 0
+
+traverseP :: (PrimMonad m, Contiguous arr, Element arr a, Element arr b)
+  => (a -> m b)
+  -> arr a
+  -> m (arr b)
+traverseP f = \ !ary ->
+  let
+    !sz = size ary
+    go !i !mary
+      | i == sz = unsafeFreeze mary
+      | otherwise = do
+          a <- indexM ary i
+          b <- f a
+          write mary i b
+          go (i + 1) mary
+  in do
+      mary <- new sz
+      go 0 mary
+
+newtype STA v a = STA {_runSTA :: forall s. Mutable v s a -> ST s (v a)}
+
+runSTA :: (Contiguous v, Element v a) => Int -> STA v a -> v a
+runSTA !sz = \ (STA m) -> runST $ new sz >>= \ ar -> m ar
+
+traverse :: (Contiguous arr, Element arr a, Element arr b, Applicative f)
+  => (a -> f b)
+  -> arr a
+  -> f (arr b)
+traverse f = \ !ary ->
+  let
+    !len = size ary
+    go !i
+      | i == len = pure $ STA $ \mary -> unsafeFreeze mary
+      | (# x #) <- index# ary i
+      = liftA2 (\b (STA m) -> STA $ \mary ->
+                  write mary i b >> m mary)
+               (f x) (go (i + 1))
+  in if len == 0
+     then pure empty
+     else runSTA len <$> go 0
 
 traverse_ ::
      (Contiguous arr, Element arr a, Applicative f)
