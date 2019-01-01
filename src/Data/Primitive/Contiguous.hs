@@ -67,6 +67,7 @@ class Contiguous (arr :: Type -> Type) where
   size :: Element arr b => arr b -> Int
   sizeMutable :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> m Int
   unsafeFreeze :: PrimMonad m => Mutable arr (PrimState m) b -> m (arr b)
+  thaw :: (PrimMonad m, Element arr b) => arr b -> Int -> Int -> m (Mutable arr (PrimState m) b)
   copy :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> arr b -> Int -> Int -> m ()
   copyMutable :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> Mutable arr (PrimState m) b -> Int -> Int -> m ()
   clone :: Element arr b => arr b -> Int -> Int -> arr b
@@ -95,6 +96,7 @@ instance Contiguous PrimArray where
   size = sizeofPrimArray
   sizeMutable = getSizeofMutablePrimArray
   unsafeFreeze = unsafeFreezePrimArray
+  thaw = thawPrimArray
   copy = copyPrimArray
   copyMutable = copyMutablePrimArray
   clone = clonePrimArray
@@ -138,6 +140,7 @@ instance Contiguous Array where
   size = sizeofArray
   sizeMutable = pure . sizeofMutableArray
   unsafeFreeze = unsafeFreezeArray
+  thaw = thawArray
   copy = copyArray
   copyMutable = copyMutableArray
   clone = cloneArray
@@ -183,6 +186,7 @@ instance Contiguous UnliftedArray where
   size = sizeofUnliftedArray
   sizeMutable = pure . sizeofMutableUnliftedArray
   unsafeFreeze = unsafeFreezeUnliftedArray
+  thaw = thawUnliftedArray
   copy = copyUnliftedArray
   copyMutable = copyMutableUnliftedArray
   clone = cloneUnliftedArray
@@ -356,6 +360,13 @@ foldlM' f z0 arr = go 0 z0
       | otherwise = return acc1
 {-# INLINABLE foldlM' #-}
 
+thawPrimArray :: (PrimMonad m, Prim a) => PrimArray a -> Int -> Int -> m (MutablePrimArray (PrimState m) a)
+thawPrimArray !arr !off !len = do
+  marr <- newPrimArray len
+  copyPrimArray marr 0 arr off len
+  return marr
+{-# INLINE thawPrimArray #-}
+
 clonePrimArray :: Prim a => PrimArray a -> Int -> Int -> PrimArray a
 clonePrimArray !arr !off !len = runST $ do
   marr <- newPrimArray len
@@ -446,10 +457,10 @@ imapMutable' f = \ !mary -> do
           go (i + 1)
   go 0
 
-traverseP :: (PrimMonad m, Contiguous arr, Element arr a, Element arr b)
+traverseP :: (PrimMonad m, Contiguous arr1, Contiguous arr2, Element arr1 a, Element arr2 b)
   => (a -> m b)
-  -> arr a
-  -> m (arr b)
+  -> arr1 a
+  -> m (arr2 b)
 traverseP f = \ !ary ->
   let
     !sz = size ary
