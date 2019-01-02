@@ -422,6 +422,7 @@ unsafeFromListReverseN n l = runST $ do
         go (ix-1) xs
   go (n - 1) l
   unsafeFreeze m
+{-# INLINE unsafeFromListReverseN #-}
 
 -- | Strictly map over a mutable array, modifying the elements in place.
 mapMutable' :: (PrimMonad m, Contiguous arr, Element arr a)
@@ -439,6 +440,7 @@ mapMutable' f = \ !mary -> do
           write mary i b
           go (i + 1)
   go 0
+{-# INLINE mapMutable' #-}
 
 -- | Strictly map over a mutable array with indices, modifying the elements in place.
 imapMutable' :: (PrimMonad m, Contiguous arr, Element arr a)
@@ -456,6 +458,7 @@ imapMutable' f = \ !mary -> do
           write mary i b
           go (i + 1)
   go 0
+{-# INLINE imapMutable' #-}
 
 traverseP :: (PrimMonad m, Contiguous arr1, Contiguous arr2, Element arr1 a, Element arr2 b)
   => (a -> m b)
@@ -474,6 +477,7 @@ traverseP f = \ !ary ->
   in do
       mary <- new sz
       go 0 mary
+{-# INLINE traverseP #-}
 
 newtype STA v a = STA {_runSTA :: forall s. Mutable v s a -> ST s (v a)}
 
