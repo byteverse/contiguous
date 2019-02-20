@@ -20,8 +20,12 @@ module Data.Primitive.Contiguous
   , foldr
   , foldMap
   , foldl'
+  , ifoldl'
   , foldr'
   , foldMap'
+  , foldlMap'
+  , ifoldlMap'
+  , ifoldlMap1'
   , foldlM'
   , traverse
   , traverseP
@@ -40,6 +44,7 @@ import Control.Applicative (liftA2)
 import Data.Bits (xor)
 import Data.Kind (Type)
 import Data.Primitive
+import Data.Semigroup (Semigroup,(<>))
 import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#)
 import Control.DeepSeq (NFData)
 
@@ -290,10 +295,11 @@ map' f a = runST $ do
             go (i+1)
   go 0
   unsafeFreeze mb
-{-# INLINABLE map' #-}
+{-# INLINE map' #-}
 
 -- | Right fold over the element of an array.
 foldr :: (Contiguous arr, Element arr a) => (a -> b -> b) -> b -> arr a -> b
+{-# INLINE foldr #-}
 foldr f z arr = go 0
   where
     !sz = size arr
@@ -311,7 +317,18 @@ foldl' f !z !ary =
       | i == sz = acc
       | (# x #) <- index# ary i = go (i+1) (f acc x)
   in go 0 z
-{-# INLINABLE foldl' #-}
+{-# INLINE foldl' #-}
+
+-- | Strict left fold over the elements of an array.
+ifoldl' :: (Contiguous arr, Element arr a) => (b -> Int -> a -> b) -> b -> arr a -> b
+ifoldl' f !z !ary =
+  let
+    !sz = size ary
+    go !i !acc
+      | i == sz = acc
+      | (# x #) <- index# ary i = go (i+1) (f acc i x)
+  in go 0 z
+{-# INLINE ifoldl' #-}
 
 -- | Strict right fold over the elements of an array.
 foldr' :: (Contiguous arr, Element arr a) => (a -> b -> b) -> b -> arr a -> b
@@ -322,7 +339,7 @@ foldr' f !z !ary =
       | (# x #) <- index# ary i
       = go (i-1) (f x acc)
   in go (size ary - 1) z
-{-# INLINABLE foldr' #-}
+{-# INLINE foldr' #-}
 
 -- | Monoidal fold over the element of an array.
 foldMap :: (Contiguous arr, Element arr a, Monoid m) => (a -> m) -> arr a -> m
@@ -333,7 +350,7 @@ foldMap f arr = go 0
       | sz > i = case index# arr i of
           (# x #) -> mappend (f x) (go (i+1))
       | otherwise = mempty
-{-# INLINABLE foldMap #-}
+{-# INLINE foldMap #-}
 
 -- | Strict monoidal fold over the elements of an array.
 foldMap' :: (Contiguous arr, Element arr a, Monoid m)
@@ -345,7 +362,48 @@ foldMap' f !ary =
       | i == sz = acc
       | (# x #) <- index# ary i = go (i+1) (mappend acc (f x))
   in go 0 mempty
-{-# INLINABLE foldMap' #-}
+{-# INLINE foldMap' #-}
+
+-- | Strict left monoidal fold over the elements of an array.
+foldlMap' :: (Contiguous arr, Element arr a, Monoid m)
+  => (a -> m) -> arr a -> m
+foldlMap' f !ary =
+  let
+    !sz = size ary
+    go !i !acc
+      | i == sz = acc
+      | (# x #) <- index# ary i = go (i+1) (mappend acc (f x))
+  in go 0 mempty
+{-# INLINE foldlMap' #-}
+
+-- | Strict monoidal fold over the elements of an array.
+ifoldlMap' :: (Contiguous arr, Element arr a, Monoid m)
+  => (Int -> a -> m)
+  -> arr a
+  -> m
+ifoldlMap' f !ary =
+  let
+    !sz = size ary
+    go !i !acc
+      | i == sz = acc
+      | (# x #) <- index# ary i = go (i+1) (mappend acc (f i x))
+  in go 0 mempty
+{-# INLINE ifoldlMap' #-}
+
+-- | Strict monoidal fold over the elements of an array.
+ifoldlMap1' :: (Contiguous arr, Element arr a, Semigroup m)
+  => (Int -> a -> m)
+  -> arr a
+  -> m
+ifoldlMap1' f !ary =
+  let
+    !sz = size ary
+    go !i !acc
+      | i == sz = acc
+      | (# x #) <- index# ary i = go (i+1) (acc <> f i x)
+    !(# e0 #) = index# ary 0
+  in go 1 (f 0 e0)
+{-# INLINE ifoldlMap1' #-}
 
 -- | Strict left monadic fold over the elements of an array.
 foldlM' :: (Contiguous arr, Element arr a, Monad m) => (b -> a -> m b) -> b -> arr a -> m b
