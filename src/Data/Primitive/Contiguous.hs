@@ -72,6 +72,7 @@ class Contiguous (arr :: Type -> Type) where
   size :: Element arr b => arr b -> Int
   sizeMutable :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> m Int
   unsafeFreeze :: PrimMonad m => Mutable arr (PrimState m) b -> m (arr b)
+  freeze :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> Int -> m (arr b)
   thaw :: (PrimMonad m, Element arr b) => arr b -> Int -> Int -> m (Mutable arr (PrimState m) b)
   copy :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> arr b -> Int -> Int -> m ()
   copyMutable :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> Mutable arr (PrimState m) b -> Int -> Int -> m ()
@@ -100,6 +101,7 @@ instance Contiguous PrimArray where
   resize = resizeMutablePrimArray
   size = sizeofPrimArray
   sizeMutable = getSizeofMutablePrimArray
+  freeze = freezePrimArray
   unsafeFreeze = unsafeFreezePrimArray
   thaw = thawPrimArray
   copy = copyPrimArray
@@ -144,6 +146,7 @@ instance Contiguous Array where
   resize = resizeArray
   size = sizeofArray
   sizeMutable = pure . sizeofMutableArray
+  freeze = freezeArray
   unsafeFreeze = unsafeFreezeArray
   thaw = thawArray
   copy = copyArray
@@ -190,6 +193,7 @@ instance Contiguous UnliftedArray where
   resize = resizeUnliftedArray
   size = sizeofUnliftedArray
   sizeMutable = pure . sizeofMutableUnliftedArray
+  freeze = freezeUnliftedArray
   unsafeFreeze = unsafeFreezeUnliftedArray
   thaw = thawUnliftedArray
   copy = copyUnliftedArray
@@ -225,6 +229,13 @@ instance Contiguous UnliftedArray where
 errorThunk :: a
 errorThunk = error "Contiguous typeclass: unitialized element"
 {-# NOINLINE errorThunk #-}
+
+freezePrimArray :: (PrimMonad m, Prim a) => MutablePrimArray (PrimState m) a -> Int -> Int -> m (PrimArray a)
+freezePrimArray !src !off !len = do
+  dst <- newPrimArray len
+  copyMutablePrimArray dst 0 src off len
+  unsafeFreezePrimArray dst
+{-# INLINE freezePrimArray #-}
 
 resizeArray :: PrimMonad m => MutableArray (PrimState m) a -> Int -> m (MutableArray (PrimState m) a)
 resizeArray !src !sz = do
