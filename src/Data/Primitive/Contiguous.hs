@@ -476,7 +476,7 @@ ifilter p arr = runST $ do
     then pure arr
     else do
       marrTrues <- new numTrue
-      let go2 !ixSrc !ixDst = if ixSrc < sz && ixDst < numTrue
+      let go2 !ixSrc !ixDst = if ixDst < numTrue
             then do
               atIxKeep <- readPrimArray marr ixSrc
               if isTrue atIxKeep
