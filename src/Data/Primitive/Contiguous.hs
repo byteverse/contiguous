@@ -5,9 +5,11 @@
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE UnboxedTuples #-}
+
 module Data.Primitive.Contiguous
   ( Contiguous(..)
   , Always
@@ -28,6 +30,8 @@ module Data.Primitive.Contiguous
   , ifoldlMap'
   , ifoldlMap1'
   , foldlM'
+  , filter
+  , ifilter
   , traverse
   , traverseP
   , traverse_
@@ -38,7 +42,7 @@ module Data.Primitive.Contiguous
   , same
   ) where
 
-import Prelude hiding (map,foldr,foldMap,traverse,read)
+import Prelude hiding (map,foldr,foldMap,traverse,read,filter)
 import Control.Monad.ST (runST,ST)
 import Control.Monad.Primitive
 import Control.Applicative (liftA2)
@@ -46,6 +50,7 @@ import Data.Bits (xor)
 import Data.Kind (Type)
 import Data.Primitive
 import Data.Semigroup (Semigroup,(<>))
+import Data.Word (Word8)
 import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#)
 import Control.DeepSeq (NFData)
 
@@ -444,6 +449,60 @@ foldlM' f z0 arr = go 0 z0
           go (i + 1) acc2
       | otherwise = return acc1
 {-# INLINABLE foldlM' #-}
+
+filter :: (Contiguous arr, Element arr a)
+  => (a -> Bool)
+  -> arr a
+  -> arr a
+filter p arr = ifilter (\_ a -> p a) arr
+
+ifilter :: (Contiguous arr, Element arr a)
+  => (Int -> a -> Bool)
+  -> arr a
+  -> arr a
+ifilter p arr = runST $ do
+  marr :: MutablePrimArray s Word8 <- newPrimArray sz
+  let go1 :: Int -> Int -> ST s Int
+      go1 !ix numTrue = if ix < sz
+        then do
+          atIx <- indexM arr ix
+          if p ix atIx
+            then do
+              writePrimArray marr ix true
+              go1 (ix + 1) (numTrue + 1)
+            else do
+              writePrimArray marr ix false
+              go1 (ix + 1) numTrue 
+        else pure numTrue
+  numTrue <- go1 0 0
+  if numTrue == sz
+    then pure arr
+    else do
+      marrTrues <- new numTrue
+      let go2 !ix = if ix < sz
+            then do
+              atIxKeep <- readPrimArray marr ix
+              if isTrue atIxKeep
+                then do
+                  atIxVal <- indexM arr ix
+                  write marrTrues ix atIxVal
+                  go2 (ix + 1)
+                else go2 (ix + 1)
+            else pure ()
+      go2 0
+      unsafeFreeze marrTrues 
+  where
+    !sz = size arr
+
+{-# INLINE true #-}
+{-# INLINE false #-}
+{-# INLINE isTrue #-}
+true,false :: Word8
+true = 1
+false = 0
+isTrue :: Word8 -> Bool
+isTrue 0 = False
+isTrue _ = True
 
 thawPrimArray :: (PrimMonad m, Prim a) => PrimArray a -> Int -> Int -> m (MutablePrimArray (PrimState m) a)
 thawPrimArray !arr !off !len = do
