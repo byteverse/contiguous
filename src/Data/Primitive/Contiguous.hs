@@ -476,17 +476,17 @@ ifilter p arr = runST $ do
     then pure arr
     else do
       marrTrues <- new numTrue
-      let go2 !ix = if ix < sz
+      let go2 !ixSrc !ixDst = if ixSrc < sz && ixDst < numTrue
             then do
-              atIxKeep <- readPrimArray marr ix
+              atIxKeep <- readPrimArray marr ixSrc
               if isTrue atIxKeep
                 then do
-                  atIxVal <- indexM arr ix
-                  write marrTrues ix atIxVal
-                  go2 (ix + 1)
-                else go2 (ix + 1)
+                  atIxVal <- indexM arr ixSrc
+                  write marrTrues ixDst atIxVal
+                  go2 (ixSrc + 1) (ixDst + 1)
+                else go2 (ixSrc + 1) ixDst
             else pure ()
-      go2 0
+      go2 0 0
       unsafeFreeze marrTrues 
   where
     !sz = size arr
