@@ -35,6 +35,7 @@ module Data.Primitive.Contiguous
   , traverse
   , traverseP
   , traverse_
+  , itraverse
   , itraverse_
   , unsafeFromListN
   , unsafeFromListReverseN
@@ -648,6 +649,23 @@ traverse_ f a = go 0 where
     then f (index a ix) *> go (ix + 1)
     else pure ()
 {-# INLINABLE traverse_ #-}
+
+itraverse ::
+     (Contiguous arr, Element arr a, Element arr b, Applicative f)
+  => (Int -> a -> f b)
+  -> arr a
+  -> f (arr b)
+itraverse f ary =
+  let !len = size ary
+      go !ix
+        | ix == len = pure $ STA $ \mary -> unsafeFreeze mary
+        | (# x #) <- index# ary ix
+        = liftA2 (\b (STA m) -> STA $ \mary ->
+                   write mary ix b >> m mary)
+                 (f ix x) (go (ix + 1))
+   in if len == 0
+        then pure empty
+        else runSTA len <$> go 0
 
 itraverse_ ::
      (Contiguous arr, Element arr a, Applicative f)
