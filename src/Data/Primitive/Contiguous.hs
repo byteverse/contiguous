@@ -51,7 +51,7 @@ import Data.Kind (Type)
 import Data.Primitive
 import Data.Semigroup (Semigroup,(<>))
 import Data.Word (Word8)
-import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#)
+import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#,dataToTag#,Int(..))
 import Control.DeepSeq (NFData)
 
 import qualified Control.DeepSeq as DS
@@ -466,13 +466,10 @@ ifilter p arr = runST $ do
       go1 !ix numTrue = if ix < sz
         then do
           atIx <- indexM arr ix
-          if p ix atIx
-            then do
-              writePrimArray marr ix true
-              go1 (ix + 1) (numTrue + 1)
-            else do
-              writePrimArray marr ix false
-              go1 (ix + 1) numTrue 
+          let !keep = p ix atIx
+          let !keepTag = I# (dataToTag# keep)
+          writePrimArray marr ix (fromIntegral keepTag)
+          go1 (ix + 1) (numTrue + keepTag)
         else pure numTrue
   numTrue <- go1 0 0
   if numTrue == sz
@@ -494,12 +491,7 @@ ifilter p arr = runST $ do
   where
     !sz = size arr
 
-{-# INLINE true #-}
-{-# INLINE false #-}
 {-# INLINE isTrue #-}
-true,false :: Word8
-true = 1
-false = 0
 isTrue :: Word8 -> Bool
 isTrue 0 = False
 isTrue _ = True
