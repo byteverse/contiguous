@@ -463,7 +463,7 @@ ifilter :: (Contiguous arr, Element arr a)
 ifilter p arr = runST $ do
   marr :: MutablePrimArray s Word8 <- newPrimArray sz
   let go1 :: Int -> Int -> ST s Int
-      go1 !ix numTrue = if ix < sz
+      go1 !ix !numTrue = if ix < sz
         then do
           atIx <- indexM arr ix
           let !keep = p ix atIx
