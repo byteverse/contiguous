@@ -10,35 +10,59 @@
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE UnboxedTuples #-}
 
+-- | The contiguous typeclass parameterises over a contiguous array type.
+--   This allows us to have a common API to a number of contiguous
+--   array types and their mutable counterparts.
 module Data.Primitive.Contiguous
-  ( Contiguous(..)
+  (
+    -- * Classes
+    Contiguous(..)
   , Always
+
+    -- * Construction
   , append
   , convert
+
+    -- * Maps
   , map
   , map'
   , imap
   , mapMutable'
   , imapMutable'
+
+    -- * Folds
   , foldr
-  , foldMap
-  , foldl'
-  , ifoldl'
   , foldr'
+  , foldl
+  , foldl'
+  , foldMap
   , foldMap'
   , foldlMap'
+
+  , ifoldl'
   , ifoldlMap'
   , ifoldlMap1'
   , foldlM'
-  , filter
-  , ifilter
+
+    -- * Traversals
   , traverse
-  , traverseP
   , traverse_
   , itraverse_
+  , traverseP
+
+    -- * Filters
+  , filter
+  , ifilter
+
+    -- * Conversions
+    -- ** Lists
   , unsafeFromListN
   , unsafeFromListReverseN
+
+    -- * Hashing
   , liftHashWithSalt
+
+    -- * Misc.
   , same
   ) where
 
@@ -61,36 +85,106 @@ import qualified Control.DeepSeq as DS
 class Always a
 instance Always a
 
--- | A contiguous array of elements.
+-- | The 'Contiguous' typeclass as an interface to a multitude of
+--   contiguous structures.
 class Contiguous (arr :: Type -> Type) where
+  -- | The Mutable counterpart to the array.
   type family Mutable arr = (r :: Type -> Type -> Type) | r -> arr
+  -- | The constraint needed to store elements in the array.
   type family Element arr :: Type -> Constraint
+  -- | The empty array.
   empty :: arr a
+  -- | Test whether the array is empty.
   null :: arr b -> Bool
+  -- | Allocate a new mutable array of the given size.
   new :: (PrimMonad m, Element arr b) => Int -> m (Mutable arr (PrimState m) b)
   replicateM :: (PrimMonad m, Element arr b) => Int -> b -> m (Mutable arr (PrimState m) b)
+  -- | Index into an array at the given index.
   index :: Element arr b => arr b -> Int -> b
+  -- | Index into an array at the given index, yielding an unboxed one-tuple of the element.
   index# :: Element arr b => arr b -> Int -> (# b #)
+  -- | Indexing in a monad.
+  --
+  --   The monad allows operations to be strict in the array
+  --   when necessary. Suppose array copying is implemented like this:
+  --
+  --   > copy mv v = ... write mv i (v ! i) ...
+  --
+  --   For lazy arrays, @v ! i@ would not be not be evaluated,
+  --   which means that @mv@ would unnecessarily retain a reference
+  --   to @v@ in each element written.
+  --
+  --   With 'indexM', copying can be implemented like this instead:
+  --
+  --   > copy mv v = ... do
+  --   >   x <- indexM v i
+  --   >   write mv i x
+  --
+  --   Here, no references to @v@ are retained because indexing
+  --   (but /not/ the elements) is evaluated eagerly.
   indexM :: (Element arr b, Monad m) => arr b -> Int -> m b
+  -- | Read a mutable array at the given index.
   read :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> m b
+  -- | Write to a mutable array at the given index.
   write :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> b -> m ()
+  -- | Resize an array into one with the given size.
   resize :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> m (Mutable arr (PrimState m) b)
+  -- | The size of the array
   size :: Element arr b => arr b -> Int
+  -- | The size of the mutable array
   sizeMutable :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> m Int
+  -- | Turn a mutable array into an immutable one without copying.
+  --   The mutable array should not be used after this conversion.
   unsafeFreeze :: PrimMonad m => Mutable arr (PrimState m) b -> m (arr b)
+  -- | Turn a mutable array into an immutable one with copying, using a slice of the mutable array.
   freeze :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> Int -> m (arr b)
+  -- | Copy a slice of an immutable array into a new mutable array.
   thaw :: (PrimMonad m, Element arr b) => arr b -> Int -> Int -> m (Mutable arr (PrimState m) b)
-  copy :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> arr b -> Int -> Int -> m ()
-  copyMutable :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> Mutable arr (PrimState m) b -> Int -> Int -> m ()
-  clone :: Element arr b => arr b -> Int -> Int -> arr b
-  cloneMutable :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> Int -> m (Mutable arr (PrimState m) b)
+  -- | Copy a slice of an array into a mutable array.
+  copy :: (PrimMonad m, Element arr b)
+    => Mutable arr (PrimState m) b -- ^ destination array
+    -> Int -- ^ offset into destination array
+    -> arr b -- ^ source array
+    -> Int -- ^ offset into source array
+    -> Int -- ^ number of elements to copy
+    -> m ()
+  -- | Copy a slice of a mutable array into another mutable array.
+  --   In the case that the destination and source arrays are the
+  --   same, the regions may overlap.
+  copyMutable :: (PrimMonad m, Element arr b)
+    => Mutable arr (PrimState m) b -- ^ destination array
+    -> Int -- ^ offset into destination array
+    -> Mutable arr (PrimState m) b -- ^ source array
+    -> Int -- ^ offset into source array
+    -> Int -- ^ number of elements to copy
+    -> m ()
+  -- | Clone a slice of an array.
+  clone :: Element arr b
+    => arr b
+    -> Int
+    -> Int
+    -> arr b
+  -- | Clone a slice of a mutable array.
+  cloneMutable :: (PrimMonad m, Element arr b)
+    => Mutable arr (PrimState m) b
+    -> Int
+    -> Int
+    -> m (Mutable arr (PrimState m) b)
+  -- | Test the two arrays for equality.
   equals :: (Element arr b, Eq b) => arr b -> arr b -> Bool
-  unlift :: arr b -> ArrayArray#
-  lift :: ArrayArray# -> arr b
+  -- | Test the two mutable arrays for equality.
   sameMutable :: Mutable arr s a -> Mutable arr s a -> Bool
+  -- | Unlift an array into an 'ArrayArray#'.
+  unlift :: arr b -> ArrayArray#
+  -- | Lift an 'ArrayArray#' into an array.
+  lift :: ArrayArray# -> arr b
+  -- | Create a singleton array.
   singleton :: Element arr a => a -> arr a
+  -- | Create a doubleton array.
   doubleton :: Element arr a => a -> a -> arr a
+  -- | Create a tripleton array.
   tripleton :: Element arr a => a -> a -> a -> arr a
+  -- | Reduce the array and all of its elements to WHNF.
   rnf :: (NFData a, Element arr a) => arr a -> ()
 
 instance Contiguous PrimArray where
@@ -261,6 +355,7 @@ emptyUnliftedArray :: UnliftedArray a
 emptyUnliftedArray = runST (unsafeNewUnliftedArray 0 >>= unsafeFreezeUnliftedArray)
 {-# NOINLINE emptyUnliftedArray #-}
 
+-- | Append two arrays.
 append :: (Contiguous arr, Element arr a) => arr a -> arr a -> arr a
 append !a !b = runST $ do
   let !szA = size a
@@ -286,6 +381,9 @@ imap f a = runST $ do
 {-# INLINABLE imap #-}
 
 -- | Map over the elements of an array.
+--
+--   Note that because a new array must be created, the resulting
+--   array type can be /different/ than the original.
 map :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (b -> c) -> arr1 b -> arr2 c
 map f a = runST $ do
   mb <- new (size a)
@@ -300,6 +398,9 @@ map f a = runST $ do
 {-# INLINABLE map #-}
 
 -- | Map strictly over the elements of an array.
+--
+--   Note that because a new array must be created, the resulting
+--   array type can be /different/ than the original.
 map' :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (b -> c) -> arr1 b -> arr2 c
 map' f a = runST $ do
   mb <- new (size a)
@@ -450,12 +551,15 @@ foldlM' f z0 arr = go 0 z0
       | otherwise = return acc1
 {-# INLINABLE foldlM' #-}
 
+-- | Drop elements that do not satisfy the predicate.
 filter :: (Contiguous arr, Element arr a)
   => (a -> Bool)
   -> arr a
   -> arr a
 filter p arr = ifilter (\_ a -> p a) arr
 
+-- | Drop elements that do not satisfy the predicate which
+--   is applied to values and their indices.
 ifilter :: (Contiguous arr, Element arr a)
   => (Int -> a -> Bool)
   -> arr a
@@ -596,6 +700,9 @@ imapMutable' f = \ !mary -> do
   go 0
 {-# INLINE imapMutable' #-}
 
+-- | Map each element of the array to an action, evaluate these
+--   actions from left to right, and collect the results in a
+--   new array.
 traverseP :: (PrimMonad m, Contiguous arr1, Contiguous arr2, Element arr1 a, Element arr2 b)
   => (a -> m b)
   -> arr1 a
@@ -620,6 +727,9 @@ newtype STA v a = STA {_runSTA :: forall s. Mutable v s a -> ST s (v a)}
 runSTA :: (Contiguous v, Element v a) => Int -> STA v a -> v a
 runSTA !sz = \ (STA m) -> runST $ new sz >>= \ ar -> m ar
 
+-- | Map each element of the array to an action, evaluate these
+--   actions from left to right, and collect the results.
+--   For a version that ignores the results, see 'traverse_'.
 traverse :: (Contiguous arr, Element arr a, Element arr b, Applicative f)
   => (a -> f b)
   -> arr a
@@ -637,6 +747,9 @@ traverse f = \ !ary ->
      then pure empty
      else runSTA len <$> go 0
 
+-- | Map each element of the array to an action, evaluate these
+--   actions from left to right, and ignore the results.
+--   For a version that doesn't ignore the results, see 'traverse'.
 traverse_ ::
      (Contiguous arr, Element arr a, Applicative f)
   => (a -> f b)
@@ -649,6 +762,9 @@ traverse_ f a = go 0 where
     else pure ()
 {-# INLINABLE traverse_ #-}
 
+-- | Map each element of the array and its index to an action,
+--   evaluate these actions from left to right, and ignore the results.
+--   For a version that doesn't ignore the results, see 'itraverse'.
 itraverse_ ::
      (Contiguous arr, Element arr a, Applicative f)
   => (Int -> a -> f b)
@@ -661,6 +777,8 @@ itraverse_ f a = go 0 where
     else pure ()
 {-# INLINABLE itraverse_ #-}
 
+-- | Lift an accumulating hash function over the elements of the array,
+--   returning the final accumulated hash.
 liftHashWithSalt :: (Contiguous arr, Element arr a)
   => (Int -> a -> Int)
   -> Int
@@ -688,5 +806,3 @@ hashIntWithSalt salt x = salt `combine` x
 
 combine :: Int -> Int -> Int
 combine h1 h2 = (h1 * 16777619) `xor` h2
-
-
