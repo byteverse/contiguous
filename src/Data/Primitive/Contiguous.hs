@@ -414,7 +414,7 @@ map' f a = runST $ do
             go (i+1)
   go 0
   unsafeFreeze mb
-{-# INLINE map' #-}
+{-# INLINABLE map' #-}
 
 -- | Convert one type of array into another.
 convert :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 b) => arr1 b -> arr2 b
