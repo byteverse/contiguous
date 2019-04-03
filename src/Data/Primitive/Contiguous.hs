@@ -27,6 +27,7 @@ module Data.Primitive.Contiguous
   , map
   , map'
   , imap
+  , imap'
   , mapMutable'
   , imapMutable'
 
@@ -438,6 +439,24 @@ imap f a = runST $ do
   go 0
   unsafeFreeze mb
 {-# INLINABLE imap #-}
+
+-- | Map strictly over the elements of an array with the index.
+--
+--   Note that because a new array must be created, the resulting
+--   array type can be /different/ than the original.
+imap' :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (Int -> b -> c) -> arr1 b -> arr2 c
+imap' f a = runST $ do
+  mb <- new (size a)
+  let go !i
+        | i == size a = return ()
+        | otherwise = do
+            x <- indexM a i
+            let !b = f i x
+            write mb i b
+            go (i + 1)
+  go 0
+  unsafeFreeze mb 
+{-# INLINABLE imap' #-}
 
 -- | Map over the elements of an array.
 --
