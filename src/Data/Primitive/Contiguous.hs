@@ -418,18 +418,8 @@ map' f a = runST $ do
 
 -- | Convert one type of array into another.
 convert :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 b) => arr1 b -> arr2 b
-convert a = runST $ do
-  mb <- new (size a)
-  let go !i
-        | i == size a = return ()
-        | otherwise = do
-            x <- indexM a i
-            write mb i x
-            go (i+1)
-  go 0
-  unsafeFreeze mb
-{-# INLINABLE convert #-}
-
+convert a = map id a
+{-# INLINE convert #-}
 
 -- | Right fold over the element of an array.
 foldr :: (Contiguous arr, Element arr a) => (a -> b -> b) -> b -> arr a -> b
