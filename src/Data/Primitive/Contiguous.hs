@@ -188,6 +188,58 @@ class Contiguous (arr :: Type -> Type) where
   -- | Reduce the array and all of its elements to WHNF.
   rnf :: (NFData a, Element arr a) => arr a -> ()
 
+instance Contiguous SmallArray where
+  type Mutable SmallArray = SmallMutableArray
+  type Element SmallArray = Always
+  empty = mempty
+  new n = newSmallArray n errorThunk
+  index = indexSmallArray 
+  indexM = indexSmallArrayM
+  index# = indexSmallArray##
+  read = readSmallArray
+  write = writeSmallArray
+  null a = case sizeofSmallArray a of
+    0 -> True
+    _ -> False
+  freeze = freezeSmallArray
+  size = sizeofSmallArray
+  sizeMutable = return . sizeofSmallMutableArray
+  unsafeFreeze = unsafeFreezeSmallArray
+  thaw = thawSmallArray
+  equals = (==)
+  sameMutable = (==)
+  singleton a = runST $ do
+    marr <- newSmallArray 1 errorThunk
+    writeSmallArray marr 0 a
+    unsafeFreezeSmallArray marr
+  doubleton a b = runST $ do
+    m <- newSmallArray 2 errorThunk
+    writeSmallArray m 0 a
+    writeSmallArray m 1 b
+    unsafeFreezeSmallArray m
+  tripleton a b c = runST $ do
+    m <- newSmallArray 3 errorThunk
+    writeSmallArray m 0 a
+    writeSmallArray m 1 b
+    writeSmallArray m 2 c
+    unsafeFreezeSmallArray m
+  rnf !ary = 
+    let !sz = sizeofSmallArray ary
+        go !ix = if ix < sz
+          then
+            let !(# x #) = indexSmallArray## ary ix
+             in DS.rnf x `seq` go (ix + 1)
+          else ()
+     in go 0
+  clone = cloneSmallArray
+  cloneMutable = cloneSmallMutableArray
+  lift = fromArrayArray#
+  unlift = toArrayArray#
+  copy = copySmallArray
+  copyMutable = copySmallMutableArray
+  replicateM = replicateSmallArrayM
+  resize = resizeSmallArray
+
 instance Contiguous PrimArray where
   type Mutable PrimArray = MutablePrimArray
   type Element PrimArray = Prim
@@ -344,6 +396,12 @@ resizeArray !src !sz = do
   copyMutableArray dst 0 src 0 (min sz (sizeofMutableArray src))
   return dst
 {-# INLINE resizeArray #-}
+
+resizeSmallArray :: PrimMonad m => SmallMutableArray (PrimState m) a -> Int -> m (SmallMutableArray (PrimState m) a)
+resizeSmallArray !src !sz = do
+  dst <- newSmallArray sz errorThunk
+  copySmallMutableArray dst 0 src 0 (min sz (sizeofSmallMutableArray src))
+  return dst
 
 resizeUnliftedArray :: (PrimMonad m, PrimUnlifted a) => MutableUnliftedArray (PrimState m) a -> Int -> m (MutableUnliftedArray (PrimState m) a)
 resizeUnliftedArray !src !sz = do
@@ -631,6 +689,18 @@ replicatePrimArrayM len a = do
   setPrimArray marr 0 len a
   return marr
 {-# INLINE replicatePrimArrayM #-}
+
+replicateSmallArrayM :: (PrimMonad m)
+  => Int
+  -> a
+  -> m (SmallMutableArray (PrimState m) a)
+replicateSmallArrayM len a = do
+  marr <- newSmallArray len errorThunk
+  let go !ix = if ix < len
+        then writeSmallArray marr ix a >> go (ix + 1)
+        else return ()
+  go 0
+  return marr
 
 -- | Create an array from a list. If the given length does
 -- not match the actual length, this function has undefined
