@@ -1,14 +1,14 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE MagicHash #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE UnboxedTuples #-}
+{-# language BangPatterns #-}
+{-# language FlexibleInstances #-}
+{-# language FunctionalDependencies #-}
+{-# language KindSignatures #-}
+{-# language MagicHash #-}
+{-# language MultiParamTypeClasses #-}
+{-# language RankNTypes #-}
+{-# language ScopedTypeVariables #-}
+{-# language TypeFamilies #-}
+{-# language TypeFamilyDependencies #-}
+{-# language UnboxedTuples #-}
 
 -- | The contiguous typeclass parameterises over a contiguous array type.
 --   This allows us to have a common API to a number of contiguous
@@ -240,6 +240,33 @@ instance Contiguous SmallArray where
   copyMutable = copySmallMutableArray
   replicateM = replicateSmallArrayM
   resize = resizeSmallArray
+  {-# inline empty #-}
+  {-# inline null #-}
+  {-# inline new #-}
+  {-# inline replicateM #-}
+  {-# inline index #-}
+  {-# inline index# #-}
+  {-# inline indexM #-}
+  {-# inline read #-}
+  {-# inline write #-}
+  {-# inline resize #-}
+  {-# inline size #-}
+  {-# inline sizeMutable #-}
+  {-# inline unsafeFreeze #-}
+  {-# inline freeze #-}
+  {-# inline thaw #-}
+  {-# inline copy #-}
+  {-# inline copyMutable #-}
+  {-# inline clone #-}
+  {-# inline cloneMutable #-}
+  {-# inline equals #-}
+  {-# inline sameMutable #-}
+  {-# inline unlift #-}
+  {-# inline lift #-}
+  {-# inline singleton #-}
+  {-# inline doubleton #-}
+  {-# inline tripleton #-}
+  {-# inline rnf #-}
 
 instance Contiguous PrimArray where
   type Mutable PrimArray = MutablePrimArray
@@ -285,6 +312,33 @@ instance Contiguous PrimArray where
     writePrimArray m 1 b
     writePrimArray m 2 c
     unsafeFreezePrimArray m
+  {-# inline empty #-}
+  {-# inline null #-}
+  {-# inline new #-}
+  {-# inline replicateM #-}
+  {-# inline index #-}
+  {-# inline index# #-}
+  {-# inline indexM #-}
+  {-# inline read #-}
+  {-# inline write #-}
+  {-# inline resize #-}
+  {-# inline size #-}
+  {-# inline sizeMutable #-}
+  {-# inline unsafeFreeze #-}
+  {-# inline freeze #-}
+  {-# inline thaw #-}
+  {-# inline copy #-}
+  {-# inline copyMutable #-}
+  {-# inline clone #-}
+  {-# inline cloneMutable #-}
+  {-# inline equals #-}
+  {-# inline sameMutable #-}
+  {-# inline unlift #-}
+  {-# inline lift #-}
+  {-# inline singleton #-}
+  {-# inline doubleton #-}
+  {-# inline tripleton #-}
+  {-# inline rnf #-}
 
 instance Contiguous Array where
   type Mutable Array = MutableArray
@@ -332,6 +386,33 @@ instance Contiguous Array where
     writeArray m 1 b
     writeArray m 2 c
     unsafeFreezeArray m
+  {-# inline empty #-}
+  {-# inline null #-}
+  {-# inline new #-}
+  {-# inline replicateM #-}
+  {-# inline index #-}
+  {-# inline index# #-}
+  {-# inline indexM #-}
+  {-# inline read #-}
+  {-# inline write #-}
+  {-# inline resize #-}
+  {-# inline size #-}
+  {-# inline sizeMutable #-}
+  {-# inline unsafeFreeze #-}
+  {-# inline freeze #-}
+  {-# inline thaw #-}
+  {-# inline copy #-}
+  {-# inline copyMutable #-}
+  {-# inline clone #-}
+  {-# inline cloneMutable #-}
+  {-# inline equals #-}
+  {-# inline sameMutable #-}
+  {-# inline unlift #-}
+  {-# inline lift #-}
+  {-# inline singleton #-}
+  {-# inline doubleton #-}
+  {-# inline tripleton #-}
+  {-# inline rnf #-}
 
 instance Contiguous UnliftedArray where
   type Mutable UnliftedArray = MutableUnliftedArray
@@ -379,24 +460,51 @@ instance Contiguous UnliftedArray where
     writeUnliftedArray m 1 b
     writeUnliftedArray m 2 c
     unsafeFreezeUnliftedArray m
+  {-# inline empty #-}
+  {-# inline null #-}
+  {-# inline new #-}
+  {-# inline replicateM #-}
+  {-# inline index #-}
+  {-# inline index# #-}
+  {-# inline indexM #-}
+  {-# inline read #-}
+  {-# inline write #-}
+  {-# inline resize #-}
+  {-# inline size #-}
+  {-# inline sizeMutable #-}
+  {-# inline unsafeFreeze #-}
+  {-# inline freeze #-}
+  {-# inline thaw #-}
+  {-# inline copy #-}
+  {-# inline copyMutable #-}
+  {-# inline clone #-}
+  {-# inline cloneMutable #-}
+  {-# inline equals #-}
+  {-# inline sameMutable #-}
+  {-# inline unlift #-}
+  {-# inline lift #-}
+  {-# inline singleton #-}
+  {-# inline doubleton #-}
+  {-# inline tripleton #-}
+  {-# inline rnf #-}
 
 errorThunk :: a
 errorThunk = error "Contiguous typeclass: unitialized element"
-{-# NOINLINE errorThunk #-}
+{-# noinline errorThunk #-}
 
 freezePrimArray :: (PrimMonad m, Prim a) => MutablePrimArray (PrimState m) a -> Int -> Int -> m (PrimArray a)
 freezePrimArray !src !off !len = do
   dst <- newPrimArray len
   copyMutablePrimArray dst 0 src off len
   unsafeFreezePrimArray dst
-{-# INLINE freezePrimArray #-}
+{-# inline freezePrimArray #-}
 
 resizeArray :: PrimMonad m => MutableArray (PrimState m) a -> Int -> m (MutableArray (PrimState m) a)
 resizeArray !src !sz = do
   dst <- newArray sz errorThunk
   copyMutableArray dst 0 src 0 (min sz (sizeofMutableArray src))
   return dst
-{-# INLINE resizeArray #-}
+{-# inline resizeArray #-}
 
 resizeSmallArray :: PrimMonad m => SmallMutableArray (PrimState m) a -> Int -> m (SmallMutableArray (PrimState m) a)
 resizeSmallArray !src !sz = do
@@ -409,11 +517,11 @@ resizeUnliftedArray !src !sz = do
   dst <- unsafeNewUnliftedArray sz
   copyMutableUnliftedArray dst 0 src 0 (min sz (sizeofMutableUnliftedArray src))
   return dst
-{-# INLINE resizeUnliftedArray #-}
+{-# inline resizeUnliftedArray #-}
 
 emptyUnliftedArray :: UnliftedArray a
 emptyUnliftedArray = runST (unsafeNewUnliftedArray 0 >>= unsafeFreezeUnliftedArray)
-{-# NOINLINE emptyUnliftedArray #-}
+{-# noinline emptyUnliftedArray #-}
 
 -- | Append two arrays.
 append :: (Contiguous arr, Element arr a) => arr a -> arr a -> arr a
@@ -424,7 +532,7 @@ append !a !b = runST $ do
   copy m 0 a 0 szA
   copy m szA b 0 szB
   unsafeFreeze m
-{-# INLINABLE append #-}
+{-# inline append #-}
 
 -- | Map over the elements of an array with the index.
 imap :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (Int -> b -> c) -> arr1 b -> arr2 c
@@ -438,7 +546,7 @@ imap f a = runST $ do
             go (i+1)
   go 0
   unsafeFreeze mb
-{-# INLINABLE imap #-}
+{-# inline imap #-}
 
 -- | Map strictly over the elements of an array with the index.
 --
@@ -473,7 +581,7 @@ map f a = runST $ do
             go (i+1)
   go 0
   unsafeFreeze mb
-{-# INLINABLE map #-}
+{-# inline map #-}
 
 -- | Map strictly over the elements of an array.
 --
@@ -491,16 +599,16 @@ map' f a = runST $ do
             go (i+1)
   go 0
   unsafeFreeze mb
-{-# INLINE map' #-}
+{-# inline map' #-}
 
 -- | Convert one type of array into another.
 convert :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 b) => arr1 b -> arr2 b
 convert a = map id a
-{-# INLINE convert #-}
+{-# inline convert #-}
 
 -- | Right fold over the element of an array.
 foldr :: (Contiguous arr, Element arr a) => (a -> b -> b) -> b -> arr a -> b
-{-# INLINE foldr #-}
+{-# inline foldr #-}
 foldr f z arr = go 0
   where
     !sz = size arr
@@ -518,7 +626,7 @@ foldl' f !z !ary =
       | i == sz = acc
       | (# x #) <- index# ary i = go (i+1) (f acc x)
   in go 0 z
-{-# INLINE foldl' #-}
+{-# inline foldl' #-}
 
 -- | Strict left fold over the elements of an array.
 ifoldl' :: (Contiguous arr, Element arr a) => (b -> Int -> a -> b) -> b -> arr a -> b
@@ -529,7 +637,7 @@ ifoldl' f !z !ary =
       | i == sz = acc
       | (# x #) <- index# ary i = go (i+1) (f acc i x)
   in go 0 z
-{-# INLINE ifoldl' #-}
+{-# inline ifoldl' #-}
 
 -- | Strict right fold over the elements of an array.
 foldr' :: (Contiguous arr, Element arr a) => (a -> b -> b) -> b -> arr a -> b
@@ -540,7 +648,7 @@ foldr' f !z !ary =
       | (# x #) <- index# ary i
       = go (i-1) (f x acc)
   in go (size ary - 1) z
-{-# INLINE foldr' #-}
+{-# inline foldr' #-}
 
 -- | Monoidal fold over the element of an array.
 foldMap :: (Contiguous arr, Element arr a, Monoid m) => (a -> m) -> arr a -> m
@@ -551,7 +659,7 @@ foldMap f arr = go 0
       | sz > i = case index# arr i of
           (# x #) -> mappend (f x) (go (i+1))
       | otherwise = mempty
-{-# INLINE foldMap #-}
+{-# inline foldMap #-}
 
 -- | Strict monoidal fold over the elements of an array.
 foldMap' :: (Contiguous arr, Element arr a, Monoid m)
@@ -563,7 +671,7 @@ foldMap' f !ary =
       | i == sz = acc
       | (# x #) <- index# ary i = go (i+1) (mappend acc (f x))
   in go 0 mempty
-{-# INLINE foldMap' #-}
+{-# inline foldMap' #-}
 
 -- | Strict left monoidal fold over the elements of an array.
 foldlMap' :: (Contiguous arr, Element arr a, Monoid m)
@@ -575,7 +683,7 @@ foldlMap' f !ary =
       | i == sz = acc
       | (# x #) <- index# ary i = go (i+1) (mappend acc (f x))
   in go 0 mempty
-{-# INLINE foldlMap' #-}
+{-# inline foldlMap' #-}
 
 -- | Strict monoidal fold over the elements of an array.
 ifoldlMap' :: (Contiguous arr, Element arr a, Monoid m)
@@ -589,7 +697,7 @@ ifoldlMap' f !ary =
       | i == sz = acc
       | (# x #) <- index# ary i = go (i+1) (mappend acc (f i x))
   in go 0 mempty
-{-# INLINE ifoldlMap' #-}
+{-# inline ifoldlMap' #-}
 
 -- | Strict monoidal fold over the elements of an array.
 ifoldlMap1' :: (Contiguous arr, Element arr a, Semigroup m)
@@ -604,7 +712,7 @@ ifoldlMap1' f !ary =
       | (# x #) <- index# ary i = go (i+1) (acc <> f i x)
     !(# e0 #) = index# ary 0
   in go 1 (f 0 e0)
-{-# INLINE ifoldlMap1' #-}
+{-# inline ifoldlMap1' #-}
 
 -- | Strict left monadic fold over the elements of an array.
 foldlM' :: (Contiguous arr, Element arr a, Monad m) => (b -> a -> m b) -> b -> arr a -> m b
@@ -617,7 +725,7 @@ foldlM' f z0 arr = go 0 z0
           acc2 <- f acc1 x
           go (i + 1) acc2
       | otherwise = return acc1
-{-# INLINABLE foldlM' #-}
+{-# inline foldlM' #-}
 
 -- | Drop elements that do not satisfy the predicate.
 filter :: (Contiguous arr, Element arr a)
@@ -663,7 +771,7 @@ ifilter p arr = runST $ do
   where
     !sz = size arr
 
-{-# INLINE isTrue #-}
+{-# inline isTrue #-}
 isTrue :: Word8 -> Bool
 isTrue 0 = False
 isTrue _ = True
@@ -673,21 +781,21 @@ thawPrimArray !arr !off !len = do
   marr <- newPrimArray len
   copyPrimArray marr 0 arr off len
   return marr
-{-# INLINE thawPrimArray #-}
+{-# inline thawPrimArray #-}
 
 clonePrimArray :: Prim a => PrimArray a -> Int -> Int -> PrimArray a
 clonePrimArray !arr !off !len = runST $ do
   marr <- newPrimArray len
   copyPrimArray marr 0 arr off len
   unsafeFreezePrimArray marr
-{-# INLINE clonePrimArray #-}
+{-# inline clonePrimArray #-}
 
 cloneMutablePrimArray :: (PrimMonad m, Prim a) => MutablePrimArray (PrimState m) a -> Int -> Int -> m (MutablePrimArray (PrimState m) a)
 cloneMutablePrimArray !arr !off !len = do
   marr <- newPrimArray len
   copyMutablePrimArray marr 0 arr off len
   return marr
-{-# INLINE cloneMutablePrimArray #-}
+{-# inline cloneMutablePrimArray #-}
 
 replicatePrimArrayM :: (PrimMonad m, Prim a)
   => Int -- ^ length
@@ -697,7 +805,7 @@ replicatePrimArrayM len a = do
   marr <- newPrimArray len
   setPrimArray marr 0 len a
   return marr
-{-# INLINE replicatePrimArrayM #-}
+{-# inline replicatePrimArrayM #-}
 
 replicateSmallArrayM :: (PrimMonad m)
   => Int
@@ -742,7 +850,7 @@ unsafeFromListReverseN n l = runST $ do
         go (ix-1) xs
   go (n - 1) l
   unsafeFreeze m
-{-# INLINE unsafeFromListReverseN #-}
+{-# inline unsafeFromListReverseN #-}
 
 -- | Strictly map over a mutable array, modifying the elements in place.
 mapMutable' :: (PrimMonad m, Contiguous arr, Element arr a)
@@ -760,7 +868,7 @@ mapMutable' f = \ !mary -> do
           write mary i b
           go (i + 1)
   go 0
-{-# INLINE mapMutable' #-}
+{-# inline mapMutable' #-}
 
 -- | Strictly map over a mutable array with indices, modifying the elements in place.
 imapMutable' :: (PrimMonad m, Contiguous arr, Element arr a)
@@ -778,7 +886,7 @@ imapMutable' f = \ !mary -> do
           write mary i b
           go (i + 1)
   go 0
-{-# INLINE imapMutable' #-}
+{-# inline imapMutable' #-}
 
 -- | Map each element of the array to an action, evaluate these
 --   actions from left to right, and collect the results in a
@@ -800,7 +908,7 @@ traverseP f = \ !ary ->
   in do
       mary <- new sz
       go 0 mary
-{-# INLINE traverseP #-}
+{-# inline traverseP #-}
 
 newtype STA v a = STA {_runSTA :: forall s. Mutable v s a -> ST s (v a)}
 
@@ -840,7 +948,7 @@ traverse_ f a = go 0 where
   go !ix = if ix < sz
     then f (index a ix) *> go (ix + 1)
     else pure ()
-{-# INLINABLE traverse_ #-}
+{-# inline traverse_ #-}
 
 -- | Map each element of the array and its index to an action,
 --   evaluating these actions from left to right.
@@ -849,7 +957,7 @@ itraverse ::
   => (Int -> a -> f b)
   -> arr a
   -> f (arr b)
-{-# INLINABLE itraverse #-}
+{-# inline itraverse #-}
 itraverse f ary =
   let !len = size ary
       go !ix
@@ -875,7 +983,7 @@ itraverse_ f a = go 0 where
   go !ix = if ix < sz
     then f ix (index a ix) *> go (ix + 1)
     else pure ()
-{-# INLINABLE itraverse_ #-}
+{-# inline itraverse_ #-}
 
 -- | Lift an accumulating hash function over the elements of the array,
 --   returning the final accumulated hash.
@@ -891,7 +999,7 @@ liftHashWithSalt f s0 arr = go 0 s0 where
       let !(# x #) = index# arr ix
        in go (ix + 1) (f s x)
     else hashIntWithSalt s ix
-{-# INLINABLE liftHashWithSalt #-}
+{-# inline liftHashWithSalt #-}
 
 -- | This function does not behave deterministically. Optimization level and
 -- inlining can affect its results. However, the one thing that can be counted
@@ -903,6 +1011,8 @@ same a b = isTrue# (sameMutableArrayArray# (unsafeCoerce# (unlift a) :: MutableA
 
 hashIntWithSalt :: Int -> Int -> Int
 hashIntWithSalt salt x = salt `combine` x
+{-# inline hashIntWithSalt #-}
 
 combine :: Int -> Int -> Int
 combine h1 h2 = (h1 * 16777619) `xor` h2
+{-# inline combine #-}
