@@ -17,7 +17,6 @@ module Data.Primitive.Contiguous
   (
     -- * Classes
     Contiguous(..)
-  , Always
 
     -- * Construction
   , append
