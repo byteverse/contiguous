@@ -22,6 +22,8 @@ module Data.Primitive.Contiguous
     -- * Construction
   , append
   , convert
+  , replicate
+  , replicateMutableM
 
     -- * Maps
   , map
@@ -68,7 +70,7 @@ module Data.Primitive.Contiguous
   , same
   ) where
 
-import Prelude hiding (map,foldr,foldMap,traverse,read,filter)
+import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate)
 import Control.Monad.ST (runST,ST)
 import Control.Monad.Primitive
 import Control.Applicative (liftA2)
@@ -100,12 +102,8 @@ class Contiguous (arr :: Type -> Type) where
   null :: arr b -> Bool
   -- | Allocate a new mutable array of the given size.
   new :: (PrimMonad m, Element arr b) => Int -> m (Mutable arr (PrimState m) b)
-  -- | @'replicate' n x@ is an array of length @n@ with @x@ the value of every element.
-  replicate :: Element arr b => Int -> b -> arr b
   -- | @'replicateMutable' n x@ is a mutable array of length @n@ with @x@ the value of every element.
   replicateMutable :: (PrimMonad m, Element arr b) => Int -> b -> m (Mutable arr (PrimState m) b)
-  -- | @'replicateM' n act@ performs the action n times, gathering the results.
-  replicateM :: (PrimMonad m, Element arr b) => Int -> m b -> m (Mutable arr (PrimState m) b)
   -- | Index into an array at the given index.
   index :: Element arr b => arr b -> Int -> b
   -- | Index into an array at the given index, yielding an unboxed one-tuple of the element.
@@ -243,16 +241,12 @@ instance Contiguous SmallArray where
   unlift = toArrayArray#
   copy = copySmallArray
   copyMutable = copySmallMutableArray
-  replicate = replicateSmallArray
   replicateMutable = replicateSmallMutableArray
-  replicateM = replicateMSmallArray
   resize = resizeSmallArray
   {-# inline empty #-}
   {-# inline null #-}
   {-# inline new #-}
-  {-# inline replicate #-}
   {-# inline replicateMutable #-}
-  {-# inline replicateM #-}
   {-# inline index #-}
   {-# inline index# #-}
   {-# inline indexM #-}
@@ -282,9 +276,7 @@ instance Contiguous PrimArray where
   type Element PrimArray = Prim
   empty = mempty
   new = newPrimArray
-  replicate = replicatePrimArray
   replicateMutable = replicateMutablePrimArray
-  replicateM = replicateMPrimArray 
   index = indexPrimArray
   index# arr ix = (# indexPrimArray arr ix #)
   indexM arr ix = return (indexPrimArray arr ix)
@@ -326,9 +318,7 @@ instance Contiguous PrimArray where
   {-# inline empty #-}
   {-# inline null #-}
   {-# inline new #-}
-  {-# inline replicate #-} 
   {-# inline replicateMutable #-} 
-  {-# inline replicateM #-}
   {-# inline index #-}
   {-# inline index# #-}
   {-# inline indexM #-}
@@ -358,9 +348,7 @@ instance Contiguous Array where
   type Element Array = Always
   empty = mempty
   new n = newArray n errorThunk
-  replicate = replicateArray
   replicateMutable = newArray
-  replicateM = replicateMArray 
   index = indexArray
   index# = indexArray##
   indexM = indexArrayM
@@ -404,9 +392,7 @@ instance Contiguous Array where
   {-# inline empty #-}
   {-# inline null #-}
   {-# inline new #-}
-  {-# inline replicate #-}
   {-# inline replicateMutable #-}
-  {-# inline replicateM #-}
   {-# inline index #-}
   {-# inline index# #-}
   {-# inline indexM #-}
@@ -436,9 +422,7 @@ instance Contiguous UnliftedArray where
   type Element UnliftedArray = PrimUnlifted
   empty = emptyUnliftedArray
   new = unsafeNewUnliftedArray
-  replicate = replicateUnliftedArray
   replicateMutable = newUnliftedArray
-  replicateM = replicateMUnliftedArray 
   index = indexUnliftedArray
   index# arr ix = (# indexUnliftedArray arr ix #)
   indexM arr ix = return (indexUnliftedArray arr ix)
@@ -482,9 +466,7 @@ instance Contiguous UnliftedArray where
   {-# inline empty #-}
   {-# inline null #-}
   {-# inline new #-}
-  {-# inline replicate #-}
   {-# inline replicateMutable #-}
-  {-# inline replicateM #-}
   {-# inline index #-}
   {-# inline index# #-}
   {-# inline indexM #-}
@@ -818,69 +800,27 @@ cloneMutablePrimArray !arr !off !len = do
   return marr
 {-# inline cloneMutablePrimArray #-}
 
-replicateMSmallArray :: (PrimMonad m)
-  => Int
-  -> m a
-  -> m (SmallMutableArray (PrimState m) a)
-replicateMSmallArray len act = do
-  marr <- newSmallArray len errorThunk
-  let go !ix = if ix < len
-        then do
-          x <- act
-          writeSmallArray marr ix x
-          go (ix + 1) 
-        else return ()
-  go 0
-  return marr
-{-# inline replicateMSmallArray #-}
+-- | @'replicate' n x@ is an array of length @n@ with @x@ the value of every element.
+replicate :: (Contiguous arr, Element arr a) => Int -> a -> arr a
+replicate n x = runST (replicateMutable n x >>= unsafeFreeze)
+{-# inline replicate #-}
 
-replicateMArray :: (PrimMonad m)
+-- | @'replicateM' n act@ performs the action n times, gathering the results.
+replicateMutableM :: (PrimMonad m, Contiguous arr, Element arr a)
   => Int
   -> m a
-  -> m (MutableArray (PrimState m) a)
-replicateMArray len act = do
-  marr <- newArray len errorThunk
+  -> m (Mutable arr (PrimState m) a)
+replicateMutableM len act = do
+  marr <- new len
   let go !ix = if ix < len
         then do
           x <- act
-          writeArray marr ix x
-          go (ix + 1) 
+          write marr ix x
+          go (ix + 1)
         else return ()
   go 0
   return marr
-{-# inline replicateMArray #-}
-
-replicateMPrimArray :: (PrimMonad m, Prim a)
-  => Int
-  -> m a
-  -> m (MutablePrimArray (PrimState m) a)
-replicateMPrimArray len act = do
-  marr <- newPrimArray len
-  let go !ix = if ix < len
-        then do
-          x <- act
-          writePrimArray marr ix x
-          go (ix + 1) 
-        else return ()
-  go 0
-  return marr
-{-# inline replicateMPrimArray #-}
-
-replicateMUnliftedArray :: (PrimMonad m, PrimUnlifted a)
-  => Int
-  -> m a
-  -> m (MutableUnliftedArray (PrimState m) a)
-replicateMUnliftedArray len act = do
-  marr <- newUnliftedArray len errorThunk
-  let go !ix = if ix < len
-        then do
-          x <- act
-          writeUnliftedArray marr ix x
-          go (ix + 1) 
-        else return ()
-  go 0
-  return marr
-{-# inline replicateMUnliftedArray #-}
+{-# inline replicateMutableM #-}
 
 replicateMutablePrimArray :: (PrimMonad m, Prim a)
   => Int -- ^ length
@@ -892,18 +832,6 @@ replicateMutablePrimArray len a = do
   return marr
 {-# inline replicateMutablePrimArray #-}
 
-replicateArray :: Int -> a -> Array a
-replicateArray i a = runST $ do
-  marr <- newArray i a
-  unsafeFreezeArray marr
-{-# inline replicateArray #-}
-
-replicateUnliftedArray :: PrimUnlifted a => Int -> a -> UnliftedArray a
-replicateUnliftedArray i a = runST $ do
-  marr <- newUnliftedArray i a
-  unsafeFreezeUnliftedArray marr
-{-# inline replicateUnliftedArray #-}
- 
 replicateSmallMutableArray :: (PrimMonad m)
   => Int
   -> a
@@ -916,12 +844,6 @@ replicateSmallMutableArray len a = do
   go 0
   return marr
 {-# inline replicateSmallMutableArray #-}
-
-replicateSmallArray :: Int -> a -> SmallArray a
-replicateSmallArray i a = runST $ do
-  marr <- replicateSmallMutableArray i a
-  unsafeFreezeSmallArray marr
-{-# inline replicateSmallArray #-}
 
 -- | Create an array from a list. If the given length does
 -- not match the actual length, this function has undefined
@@ -1088,9 +1010,6 @@ itraverse_ f a = go 0 where
     then f ix (index a ix) *> go (ix + 1)
     else pure ()
 {-# inline itraverse_ #-}
-
--- | @'replicateM' n act@ performs the action n times, gathering the results. 
---  replicateM :: (PrimMonad m, Element arr b) => Int -> m b -> m (Mutable arr (PrimState m) b)
 
 -- | Lift an accumulating hash function over the elements of the array,
 --   returning the final accumulated hash.
