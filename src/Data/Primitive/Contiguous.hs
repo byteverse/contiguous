@@ -1010,6 +1010,58 @@ itraverse_ f a = go 0 where
     else pure ()
 {-# inline itraverse_ #-}
 
+-- | Construct an array of the given length by applying
+--   the function to each index.
+generate :: (Contiguous arr, Element arr a)
+  => Int
+  -> (Int -> a)
+  -> arr a
+generate len f = runST (generateMutable len f >>= unsafeFreeze)
+{-# inline generate #-}
+
+-- | Construct a mutable array of the given length by applying
+--   the function to each index.
+generateMutable :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Int
+  -> (Int -> a)
+  -> m (Mutable arr (PrimState m) a)
+generateMutable !len f = do
+  marr <- new len
+  let go !ix = if ix < len
+        then do
+          write marr ix (f ix)
+          go (ix + 1)
+        else return ()
+  go 0
+  return marr
+{-# inline generateMutable #-}
+
+iterateN :: (Contiguous arr, Element arr a)
+  => Int
+  -> (a -> a)
+  -> a
+  -> arr a
+iterateN len f z0 = runST (iterateNMutable len f z0 >>= unsafeFreeze)
+{-# inline iterateN #-}
+
+iterateNMutable :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Int
+  -> (a -> a)
+  -> a 
+  -> m (Mutable arr (PrimState m) a)
+iterateNMutable !len f z0 = do
+  marr <- new len
+  let go !ix !acc
+        | ix <= 0 = write marr ix z0
+        | ix == len = return ()
+        | otherwise = do
+            let a = f acc
+            write marr ix a
+            go (ix + 1) a 
+  go 0 z0
+  return marr
+{-# inline iterateNMutable #-}
+ 
 -- | Lift an accumulating hash function over the elements of the array,
 --   returning the final accumulated hash.
 liftHashWithSalt :: (Contiguous arr, Element arr a)
