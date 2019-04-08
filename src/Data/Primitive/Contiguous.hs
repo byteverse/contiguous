@@ -80,6 +80,7 @@ import Data.Semigroup (Semigroup,(<>))
 import Data.Word (Word8)
 import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#,dataToTag#,Int(..))
 import Control.DeepSeq (NFData)
+import GHC.Base (build)
 
 import qualified Control.DeepSeq as DS
 
@@ -1025,43 +1026,233 @@ generateMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   => Int
   -> (Int -> a)
   -> m (Mutable arr (PrimState m) a)
-generateMutable !len f = do
+generateMutable len f = generateMutableM len (return . f)
+{-# inline generateMutable #-}
+
+-- | Construct a mutable array of the given length by applying
+--   the monadic action to each index.
+generateMutableM :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Int
+  -> (Int -> m a)
+  -> m (Mutable arr (PrimState m) a)
+generateMutableM !len f = do
   marr <- new len
   let go !ix = if ix < len
         then do
-          write marr ix (f ix)
+          x <- f ix
+          write marr ix x
           go (ix + 1)
         else return ()
   go 0
   return marr
-{-# inline generateMutable #-}
+{-# inline generateMutableM #-}
 
+-- | Apply a function @n@ times to a value and construct an array
+--   where each consecutive element is the result of an additional
+--   application of this function. The zeroth element is the original value.
+--
+--   @'iterateN' 5 ('+' 1) 0 = 'fromListN' 5 [0,1,2,3,4]@
 iterateN :: (Contiguous arr, Element arr a)
   => Int
   -> (a -> a)
   -> a
   -> arr a
-iterateN len f z0 = runST (iterateNMutable len f z0 >>= unsafeFreeze)
+iterateN len f z0 = runST (iterateMutableN len f z0 >>= unsafeFreeze)
 {-# inline iterateN #-}
 
-iterateNMutable :: (Contiguous arr, Element arr a, PrimMonad m)
+-- | Apply a function @n@ times to a value and construct a mutable array
+--   where each consecutive element is the result of an additional
+--   application of this function. The zeroth element is the original value.
+iterateMutableN :: (Contiguous arr, Element arr a, PrimMonad m)
   => Int
   -> (a -> a)
   -> a 
   -> m (Mutable arr (PrimState m) a)
-iterateNMutable !len f z0 = do
+iterateMutableN len f z0 = iterateMutableNM len (return . f) z0
+{-# inline iterateMutableN #-}
+
+-- | Apply a monadic function @n@ times to a value and construct a mutable array
+--   where each consecutive element is the result of an additional
+--   application of this function. The zeroth element is the original value.
+iterateMutableNM :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Int
+  -> (a -> m a)
+  -> a
+  -> m (Mutable arr (PrimState m) a)
+iterateMutableNM !len f z0 = do
   marr <- new len
+  -- we are strict in the accumulator because
+  -- otherwise we could build up a ton of `f (f (f (f .. (f a))))`
+  -- thunks for no reason.
   let go !ix !acc
-        | ix <= 0 = write marr ix z0
+        | ix <= 0 = write marr ix z0 >> go (ix + 1) z0
         | ix == len = return ()
         | otherwise = do
-            let a = f acc
+            a <- f acc
             write marr ix a
-            go (ix + 1) a 
+            go (ix + 1) a
   go 0 z0
   return marr
-{-# inline iterateNMutable #-}
- 
+{-# inline iterateMutableNM #-}
+
+-- | Execute the monad action and freeze the resulting array.
+create :: (Contiguous arr, Element arr a)
+  => (forall s. ST s (Mutable arr s a))
+  -> arr a
+create x = runST (unsafeFreeze =<< x)
+{-# inline create #-}
+
+-- | Execute the monadic action and freeze the resulting array.
+createT :: (Contiguous arr, Element arr a, Traversable f)
+  => (forall s. ST s (f (Mutable arr s a)))
+  -> f (arr a)
+createT p = runST (mapM unsafeFreeze =<< p)
+{-# inline createT #-}
+
+-- | Construct an array by repeatedly applying a generator
+--   function to a seed. The generator function yields 'Just' the
+--   next element and the new seed or 'Nothing' if there are no more
+--   elements.
+--
+--   > unfoldr (\n -> if n == 0 then Nothing else Just (n,n-1) 10
+--   > <10,9,8,7,6,5,4,3,2,1>
+
+-- unfortunately, because we don't know ahead of time when to stop,
+-- we need to construct a list and then turn it into an array.
+unfoldr :: (Contiguous arr, Element arr a)
+  => (b -> Maybe (a,b))
+  -> b
+  -> arr a
+unfoldr f z0 = create (unfoldrMutable f z0)
+{-# inline unfoldr #-}
+
+-- | Construct a mutable array by repeatedly applying a generator
+--   function to a seed. The generator function yields 'Just' the
+--   next element and the new seed or 'Nothing' if there are no more
+--   elements.
+--
+--   > unfoldrMutable (\n -> if n == 0 then Nothing else Just (n,n-1) 10
+--   > <10,9,8,7,6,5,4,3,2,1>
+
+-- unfortunately, because we don't know ahead of time when to stop,
+-- we need to construct a list and then turn it into an array.
+unfoldrMutable :: (Contiguous arr, Element arr a, PrimMonad m)
+  => (b -> Maybe (a,b))
+  -> b
+  -> m (Mutable arr (PrimState m) a)
+unfoldrMutable f z0 = do
+  let go !sz !s xs = case f s of
+        Nothing -> return (sz,xs)
+        Just (x,s') -> go (sz + 1) s' (xs ++ [x])
+  (sz,xs) <- go 0 z0 []
+  fromListMutableN sz xs
+{-# inline unfoldrMutable #-}
+
+-- | Convert an array to a list.
+toList :: (Contiguous arr, Element arr a)
+  => arr a
+  -> [a]
+toList arr = build (\c n -> foldr c n arr)
+{-# inline toList #-}
+
+-- | Convert a mutable array to a list.
+
+-- I don't think this can be expressed in terms of foldr/build,
+-- so we just loop through the array. 
+toListMutable :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Mutable arr (PrimState m) a
+  -> m [a]
+toListMutable marr = do
+  sz <- sizeMutable marr
+  let go !ix acc = if ix >= 0
+        then do
+          x <- read marr ix
+          go (ix - 1) (x : acc)
+        else return acc
+  go (sz - 1) []
+
+-- | Given an 'Int' that is representative of the length of
+--   the list, convert the list into a mutable array of the
+--   given length.
+--
+--   /Note/: calls 'error' if the given length is incorrect.
+fromListMutableN :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Int
+  -> [a]
+  -> m (Mutable arr (PrimState m) a)
+fromListMutableN len vs = do
+  marr <- new len
+  let go [] !ix = if ix == len
+        then return ()
+        else error "Data.Primitive.Contiguous.fromListN: list length less than specified size."
+      go (a:as) !ix = if ix < len
+        then do
+          write marr ix a
+          go as (ix + 1)
+        else error "Data.Primitive.Contiguous.fromListN: list length greater than specified size."
+  go vs 0
+  return marr 
+{-# inline fromListMutableN #-}
+
+-- | Convert a list into a mutable array of the given length.
+fromListMutable :: (Contiguous arr, Element arr a, PrimMonad m)
+  => [a]
+  -> m (Mutable arr (PrimState m) a)
+fromListMutable xs = fromListMutableN (length xs) xs
+{-# inline fromListMutable #-}
+
+-- | Given an 'Int' that is representative of the length of
+--   the list, convert the list into a mutable array of the
+--   given length.
+--
+--   /Note/: calls 'error' if the given length is incorrect.
+fromListN :: (Contiguous arr, Element arr a)
+  => Int
+  -> [a]
+  -> arr a
+fromListN len vs = create (fromListMutableN len vs)
+{-# inline fromListN #-}
+
+-- | Convert a list into an array.
+fromList :: (Contiguous arr, Element arr a)
+  => [a]
+  -> arr a
+fromList vs = create (fromListMutable vs)
+{-# inline fromList #-}
+
+-- | Modify the elements of a mutable array in-place.
+modify :: (Contiguous arr, Element arr a, PrimMonad m)
+  => (a -> a)
+  -> Mutable arr (PrimState m) a
+  -> m ()
+modify f marr = do
+  !sz <- sizeMutable marr
+  let go !ix = if ix < sz
+        then do
+          x <- read marr ix
+          write marr ix (f x)
+          go (ix + 1)
+        else return ()
+  go 0
+{-# inline modify #-}
+
+-- | Strictly modify the elements of a mutable array in-place.
+modify' :: (Contiguous arr, Element arr a, PrimMonad m)
+  => (a -> a)
+  -> Mutable arr (PrimState m) a
+  -> m ()
+modify' f marr = do
+  !sz <- sizeMutable marr
+  let go !ix = if ix < sz
+        then do
+          x <- read marr ix
+          let !y = f x
+          write marr ix y
+          go (ix + 1)
+        else return ()
+  go 0
+{-# inline modify' #-}
+
 -- | Lift an accumulating hash function over the elements of the array,
 --   returning the final accumulated hash.
 liftHashWithSalt :: (Contiguous arr, Element arr a)
