@@ -61,6 +61,7 @@ module Data.Primitive.Contiguous
     -- ** Lists
   , unsafeFromListN
   , unsafeFromListReverseN
+  , unsafeFromListReverseMutableN
 
     -- * Hashing
   , liftHashWithSalt
@@ -852,15 +853,38 @@ unsafeFromListN :: (Contiguous arr, Element arr a)
   => Int -- ^ length of list
   -> [a] -- ^ list
   -> arr a
-unsafeFromListN n l = runST $ do
+unsafeFromListN n l = create (unsafeFromListMutableN n l)
+{-# inline unsafeFromListN #-}
+
+unsafeFromListMutableN :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Int
+  -> [a]
+  -> m (Mutable arr (PrimState m) a)
+unsafeFromListMutableN n l = do
   m <- new n
-  let go !_ [] = return ()
+  let go !_ [] = return m
       go !ix (x : xs) = do
         write m ix x
         go (ix+1) xs
   go 0 l
-  unsafeFreeze m
+{-# inline unsafeFromListMutableN #-}
 
+-- | Create a mutable array from a list, reversing the order of
+--   the elements. If the given length does not match the actual length,
+--   this function has undefined behavior.
+unsafeFromListReverseMutableN :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Int
+  -> [a]
+  -> m (Mutable arr (PrimState m) a)
+unsafeFromListReverseMutableN n l = do
+  m <- new n
+  let go !_ [] = return m
+      go !ix (x : xs) = do
+        write m ix x
+        go (ix-1) xs
+  go (n - 1) l
+{-# inline unsafeFromListReverseMutableN #-}
+ 
 -- | Create an array from a list, reversing the order of the
 -- elements. If the given length does not match the actual length,
 -- this function has undefined behavior.
@@ -868,14 +892,7 @@ unsafeFromListReverseN :: (Contiguous arr, Element arr a)
   => Int
   -> [a]
   -> arr a
-unsafeFromListReverseN n l = runST $ do
-  m <- new n
-  let go !_ [] = return ()
-      go !ix (x : xs) = do
-        write m ix x
-        go (ix-1) xs
-  go (n - 1) l
-  unsafeFreeze m
+unsafeFromListReverseN n l = create (unsafeFromListReverseMutableN n l)
 {-# inline unsafeFromListReverseN #-}
 
 -- | Strictly map over a mutable array, modifying the elements in place.
@@ -1141,11 +1158,11 @@ unfoldrMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   -> b
   -> m (Mutable arr (PrimState m) a)
 unfoldrMutable f z0 = do
-  let go !sz !s xs = case f s of
+  let go !sz !s !xs = case f s of
         Nothing -> return (sz,xs)
-        Just (x,s') -> go (sz + 1) s' (xs ++ [x])
+        Just (x,s') -> go (sz + 1) s' (x : xs)
   (sz,xs) <- go 0 z0 []
-  fromListMutableN sz xs
+  unsafeFromListReverseMutableN sz xs
 {-# inline unfoldrMutable #-}
 
 -- | Convert an array to a list.
