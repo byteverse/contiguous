@@ -15,11 +15,104 @@
 --   array types and their mutable counterparts.
 module Data.Primitive.Contiguous
   (
-    -- * Classes
-    Contiguous(..)
+    -- * Accessors
+    -- ** Length Information
+    size
+  , sizeMutable
+  , null
+    -- ** Indexing
+  , index
+  , index#
+  , read
+    -- ** Monadic indexing
+  , indexM
 
     -- * Construction
-  , append
+    -- ** Initialisation
+  , empty
+  , new
+  , singleton
+  , doubleton
+  , tripleton
+  , replicate
+  , replicateMutable
+  , generate
+  , generateMutable
+  , iterateN
+  , iterateMutableN
+    -- ** Monadic initialisation
+  , replicateMutableM
+  , generateMutableM
+  , iterateMutableNM
+  , create
+  , createT
+    -- ** Unfolding
+  , unfoldr
+  , unfoldrN
+  , unfoldrMutable
+--  , unfoldrMutableM
+--  , unfoldrMutableNM
+--  , constructN
+--  , constructrN
+    -- ** Enumeration
+-- , enumFromN
+-- , enumFromStepN
+-- , enumFromTo
+-- , enumFromThenTo
+    -- ** Concatenation
+   , append
+    -- * Modifying arrays
+--    -- ** Bulk updates
+--    -- ** Accumulations
+    -- ** Permutations
+   , reverse
+   , reverseMutable
+
+    -- * Elementwise operations
+    -- ** Mapping
+   , map
+   , map'
+   , mapMutable
+   , mapMutable'
+   , imap
+   , imap'
+   , imapMutable
+   , imapMutable'
+    -- ** Monadic mapping
+-- , mapM
+-- , imapM
+-- , mapM_
+-- , imapM_
+-- , forM
+-- , forM_
+    -- ** Zipping
+-- , zipWith
+-- , izipWith
+    -- ** Monadic zipping
+    -- ** Unzipping
+
+    -- * Working with predicates
+    -- ** Filtering
+    -- ** Partitioning
+    -- ** Searching
+
+    -- * Folds
+    -- ** Specialised folds
+    -- ** Monadic folds
+    -- ** Monadic sequencing
+
+    -- * Traversals
+    -- ** Foo
+
+    -- * Prefix sums (scans)
+
+    -- * Conversions
+    -- ** Lists
+    -- ** Other array types
+
+{-
+    -- * Construction
+    append
   , convert
   , replicate
   , replicateMutableM
@@ -60,6 +153,7 @@ module Data.Primitive.Contiguous
     -- * Conversions
     -- ** Lists
   , unsafeFromListN
+  , unsafeFromListMutableN
   , unsafeFromListReverseN
   , unsafeFromListReverseMutableN
 
@@ -68,9 +162,14 @@ module Data.Primitive.Contiguous
 
     -- * Misc.
   , same
+-}
+
+    -- * Classes
+  , Contiguous(Mutable,Element)
+  , Always
   ) where
 
-import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate)
+import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate,null,reverse)
 import Control.Monad.ST (runST,ST)
 import Control.Monad.Primitive
 import Control.Applicative (liftA2)
@@ -178,8 +277,9 @@ class Contiguous (arr :: Type -> Type) where
     -> m (Mutable arr (PrimState m) b)
   -- | Test the two arrays for equality.
   equals :: (Element arr b, Eq b) => arr b -> arr b -> Bool
-  -- | Test the two mutable arrays for equality.
-  sameMutable :: Mutable arr s a -> Mutable arr s a -> Bool
+  -- | Test the two mutable arrays for pointer equality.
+  --   Does not check equality of elements.
+  equalsMutable :: Mutable arr s a -> Mutable arr s a -> Bool
   -- | Unlift an array into an 'ArrayArray#'.
   unlift :: arr b -> ArrayArray#
   -- | Lift an 'ArrayArray#' into an array.
@@ -212,7 +312,7 @@ instance Contiguous SmallArray where
   unsafeFreeze = unsafeFreezeSmallArray
   thaw = thawSmallArray
   equals = (==)
-  sameMutable = (==)
+  equalsMutable = (==)
   singleton a = runST $ do
     marr <- newSmallArray 1 errorThunk
     writeSmallArray marr 0 a
@@ -264,7 +364,7 @@ instance Contiguous SmallArray where
   {-# inline clone #-}
   {-# inline cloneMutable #-}
   {-# inline equals #-}
-  {-# inline sameMutable #-}
+  {-# inline equalsMutable #-}
   {-# inline unlift #-}
   {-# inline lift #-}
   {-# inline singleton #-}
@@ -299,7 +399,7 @@ instance Contiguous PrimArray where
   null (PrimArray a) = case sizeofByteArray# a of
     0# -> True
     _ -> False
-  sameMutable = sameMutablePrimArray
+  equalsMutable = sameMutablePrimArray
   rnf (PrimArray !_) = ()
   singleton a = runST $ do
     marr <- newPrimArray 1
@@ -336,7 +436,7 @@ instance Contiguous PrimArray where
   {-# inline clone #-}
   {-# inline cloneMutable #-}
   {-# inline equals #-}
-  {-# inline sameMutable #-}
+  {-# inline equalsMutable #-}
   {-# inline unlift #-}
   {-# inline lift #-}
   {-# inline singleton #-}
@@ -371,7 +471,7 @@ instance Contiguous Array where
   null (Array a) = case sizeofArray# a of
     0# -> True
     _ -> False
-  sameMutable = sameMutableArray
+  equalsMutable = sameMutableArray
   rnf !ary = 
     let !sz = sizeofArray ary
         go !i
@@ -410,7 +510,7 @@ instance Contiguous Array where
   {-# inline clone #-}
   {-# inline cloneMutable #-}
   {-# inline equals #-}
-  {-# inline sameMutable #-}
+  {-# inline equalsMutable #-}
   {-# inline unlift #-}
   {-# inline lift #-}
   {-# inline singleton #-}
@@ -445,7 +545,7 @@ instance Contiguous UnliftedArray where
   null (UnliftedArray a) = case sizeofArrayArray# a of
     0# -> True
     _ -> False
-  sameMutable = sameMutableUnliftedArray
+  equalsMutable = sameMutableUnliftedArray
   rnf !ary = 
     let !sz = sizeofUnliftedArray ary
         go !i
@@ -484,7 +584,7 @@ instance Contiguous UnliftedArray where
   {-# inline clone #-}
   {-# inline cloneMutable #-}
   {-# inline equals #-}
-  {-# inline sameMutable #-}
+  {-# inline equalsMutable #-}
   {-# inline unlift #-}
   {-# inline lift #-}
   {-# inline singleton #-}
@@ -803,10 +903,10 @@ cloneMutablePrimArray !arr !off !len = do
 
 -- | @'replicate' n x@ is an array of length @n@ with @x@ the value of every element.
 replicate :: (Contiguous arr, Element arr a) => Int -> a -> arr a
-replicate n x = runST (replicateMutable n x >>= unsafeFreeze)
+replicate n x = create (replicateMutable n x)
 {-# inline replicate #-}
 
--- | @'replicateM' n act@ performs the action n times, gathering the results.
+-- | @'replicateMutableM' n act@ performs the action n times, gathering the results.
 replicateMutableM :: (PrimMonad m, Contiguous arr, Element arr a)
   => Int
   -> m a
@@ -895,6 +995,22 @@ unsafeFromListReverseN :: (Contiguous arr, Element arr a)
 unsafeFromListReverseN n l = create (unsafeFromListReverseMutableN n l)
 {-# inline unsafeFromListReverseN #-}
 
+-- | Map over a mutable array, modifying the elements in place.
+mapMutable :: (Contiguous arr, Element arr a, PrimMonad m)
+  => (a -> a)
+  -> Mutable arr (PrimState m) a
+  -> m ()
+mapMutable f = \ !mary -> do
+  !sz <- sizeMutable mary
+  let go !ix = if ix < sz
+        then do
+          a <- read mary ix
+          write mary ix (f a)
+          go (ix + 1)
+        else pure ()
+  go 0
+{-# inline mapMutable #-}
+
 -- | Strictly map over a mutable array, modifying the elements in place.
 mapMutable' :: (PrimMonad m, Contiguous arr, Element arr a)
   => (a -> a)
@@ -912,6 +1028,22 @@ mapMutable' f = \ !mary -> do
           go (i + 1)
   go 0
 {-# inline mapMutable' #-}
+
+-- | Map over a mutable array with indices, modifying the elements in place.
+imapMutable :: (Contiguous arr, Element arr a, PrimMonad m)
+  => (Int -> a -> a)
+  -> Mutable arr (PrimState m) a
+  -> m ()
+imapMutable f = \ !mary -> do
+  !sz <- sizeMutable mary
+  let go !ix = if ix < sz
+        then do
+          a <- read mary ix
+          write mary ix (f ix a)
+          go (ix + 1)
+        else pure ()
+  go 0
+{-# inline imapMutable #-}
 
 -- | Strictly map over a mutable array with indices, modifying the elements in place.
 imapMutable' :: (PrimMonad m, Contiguous arr, Element arr a)
@@ -1347,6 +1479,39 @@ liftHashWithSalt f s0 arr = go 0 s0 where
        in go (ix + 1) (f s x)
     else hashIntWithSalt s ix
 {-# inline liftHashWithSalt #-}
+
+reverse :: (Contiguous arr, Element arr a)
+  => arr a
+  -> arr a
+reverse arr = runST $ do
+  marr <- new sz
+  let go !ix = if ix > (-1)
+        then do
+          x <- indexM arr ix
+          write marr ix x
+          go (ix - 1)
+        else return ()
+  go (sz - 1) 
+  unsafeFreeze marr 
+  where
+    !sz = size arr
+{-# inline reverse #-}
+
+reverseMutable :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Mutable arr (PrimState m) a
+  -> m ()
+reverseMutable marr = do
+  !sz <- sizeMutable marr
+  let go !start !end = if start < end
+        then do
+          atS <- read marr start
+          atE <- read marr end
+          write marr start atE
+          write marr end atS
+          go (start + 1) (end + 1)
+        else pure ()
+  go 0 (sz - 1) 
+{-# inline reverseMutable #-}
 
 -- | This function does not behave deterministically. Optimization level and
 -- inlining can affect its results. However, the one thing that can be counted
