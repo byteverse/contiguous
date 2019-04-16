@@ -1158,12 +1158,49 @@ unfoldrMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   -> b
   -> m (Mutable arr (PrimState m) a)
 unfoldrMutable f z0 = do
-  let go !sz !s !xs = case f s of
+  let go !sz s !xs = case f s of
         Nothing -> return (sz,xs)
         Just (x,s') -> go (sz + 1) s' (x : xs)
   (sz,xs) <- go 0 z0 []
   unsafeFromListReverseMutableN sz xs
 {-# inline unfoldrMutable #-}
+
+-- | Construct an array with at most n elements by repeatedly
+--   applying the generator function to a seed. The generator function
+--   yields 'Just' the next element and the new seed or 'Nothing' if
+--   there are no more elements.
+unfoldrN :: (Contiguous arr, Element arr a)
+  => Int
+  -> (b -> Maybe (a, b))
+  -> b
+  -> arr a
+unfoldrN maxSz f z0 = create (unfoldrMutableN maxSz f z0)
+{-# inline unfoldrN #-}
+
+-- | Construct a mutable array with at most n elements by repeatedly
+--   applying the generator function to a seed. The generator function
+--   yields 'Just' the next element and the new seed or 'Nothing' if
+--   there are no more elements.
+unfoldrMutableN :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Int
+  -> (b -> Maybe (a, b))
+  -> b
+  -> m (Mutable arr (PrimState m) a)
+unfoldrMutableN !maxSz f z0 = do
+  m <- new maxSz
+  let go !ix s = if ix < maxSz
+        then case f s of
+          Nothing -> return ix
+          Just (x,s') -> do
+            write m ix x
+            go (ix + 1) s'
+        else return ix
+  sz <- go 0 z0
+  case compare maxSz sz of
+    EQ -> return m
+    GT -> resize m sz
+    LT -> error "Data.Primitive.Contiguous.unfoldrMutableN: internal error"
+{-# inline unfoldrMutableN #-}
 
 -- | Convert an array to a list.
 toList :: (Contiguous arr, Element arr a)
@@ -1269,6 +1306,31 @@ modify' f marr = do
         else return ()
   go 0
 {-# inline modify' #-}
+
+-- | Yield an array of the given length containing the values
+--   @x, x+1@ etc.
+enumFromN :: (Contiguous arr, Element arr a, Enum a)
+  => a
+  -> Int
+  -> arr a
+enumFromN z0 sz = create (enumFromMutableN z0 sz)
+{-# inline enumFromN #-}
+
+-- | Yield a mutable array of the given length containing the values
+--   @x, x+1@ etc.
+enumFromMutableN :: (Contiguous arr, Element arr a, PrimMonad m, Enum a)
+  => a
+  -> Int
+  -> m (Mutable arr (PrimState m) a)
+enumFromMutableN z0 !sz = do
+  m <- new sz
+  let go !ix z = if ix < sz
+        then do
+          write m ix z
+          go (ix + 1) (succ z)
+        else return m
+  go 0 z0
+{-# inline enumFromMutableN #-}
 
 -- | Lift an accumulating hash function over the elements of the array,
 --   returning the final accumulated hash.
