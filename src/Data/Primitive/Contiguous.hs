@@ -40,6 +40,7 @@ module Data.Primitive.Contiguous
   , generateMutable
   , iterateN
   , iterateMutableN
+  , write
     -- ** Monadic initialisation
   , replicateMutableM
   , generateMutableM
