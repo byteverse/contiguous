@@ -55,7 +55,8 @@ module Data.Primitive.Contiguous
 --  , constructN
 --  , constructrN
     -- ** Enumeration
--- , enumFromN
+  , enumFromN
+  , enumFromMutableN
 -- , enumFromStepN
 -- , enumFromTo
 -- , enumFromThenTo
@@ -78,6 +79,8 @@ module Data.Primitive.Contiguous
    , imap'
    , imapMutable
    , imapMutable'
+   , modify
+   , modify'
     -- ** Monadic mapping
 -- , mapM
 -- , imapM
@@ -93,76 +96,67 @@ module Data.Primitive.Contiguous
 
     -- * Working with predicates
     -- ** Filtering
+   , filter
+   , ifilter
     -- ** Partitioning
     -- ** Searching
-
+    -- ** Comparing for equality
+   , equals
+   , equalsMutable
+   , same
     -- * Folds
+--   , foldl
+   , foldl'
+--   , foldr
+   , foldr'
+   , foldMap
+   , foldMap'
+   , foldlMap'
+   , ifoldl'
+--   , ifoldr'
+   , ifoldlMap'
+   , ifoldlMap1'
+   , foldlM'
     -- ** Specialised folds
     -- ** Monadic folds
     -- ** Monadic sequencing
 
     -- * Traversals
+   , traverse
+   , traverse_
+   , itraverse
+   , itraverse_
+   , traverseP
     -- ** Foo
 
     -- * Prefix sums (scans)
 
     -- * Conversions
     -- ** Lists
+   , fromList
+   , fromListN
+   , fromListMutable
+   , fromListMutableN
+   , unsafeFromListN
+   , unsafeFromListReverseN
+   , toList
+   , toListMutable
     -- ** Other array types
-
-{-
-    -- * Construction
-    append
-  , convert
-  , replicate
-  , replicateMutableM
-
-    -- * Maps
-  , map
-  , map'
-  , imap
-  , imap'
-  , mapMutable'
-  , imapMutable'
-
-    -- * Folds
-  , foldr
-  , foldr'
-  , foldl
-  , foldl'
-  , foldMap
-  , foldMap'
-  , foldlMap'
-
-  , ifoldl'
-  , ifoldlMap'
-  , ifoldlMap1'
-  , foldlM'
-
-    -- * Traversals
-  , traverse
-  , traverse_
-  , itraverse
-  , itraverse_
-  , traverseP
-
-    -- * Filters
-  , filter
-  , ifilter
-
-    -- * Conversions
-    -- ** Lists
-  , unsafeFromListN
-  , unsafeFromListMutableN
-  , unsafeFromListReverseN
-  , unsafeFromListReverseMutableN
+   , convert
+   , lift
+   , unlift
+    -- ** Between mutable and immutable variants
+   , clone
+   , cloneMutable
+   , copyMutable
+   , freeze
+   , thaw
 
     -- * Hashing
-  , liftHashWithSalt
+   , liftHashWithSalt
 
-    -- * Misc.
-  , same
--}
+    -- * Forcing the contents of an array
+   , rnf
 
     -- * Classes
   , Contiguous(Mutable,Element)
@@ -175,7 +169,7 @@ import Control.Monad.Primitive
 import Control.Applicative (liftA2)
 import Data.Bits (xor)
 import Data.Kind (Type)
-import Data.Primitive
+import Data.Primitive hiding (fromList,fromListN)
 import Data.Semigroup (Semigroup,(<>))
 import Data.Word (Word8)
 import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#,dataToTag#,Int(..))
