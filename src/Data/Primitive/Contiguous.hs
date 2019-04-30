@@ -149,6 +149,7 @@ module Data.Primitive.Contiguous
     -- ** Between mutable and immutable variants
    , clone
    , cloneMutable
+   , copy
    , copyMutable
    , freeze
    , thaw
