@@ -153,6 +153,7 @@ module Data.Primitive.Contiguous
    , copyMutable
    , freeze
    , thaw
+   , unsafeFreeze
 
     -- * Hashing
    , liftHashWithSalt
