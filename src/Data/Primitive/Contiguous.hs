@@ -896,7 +896,7 @@ mapMaybe f arr = runST $ do
           atIx <- indexM arr ix
           case (f atIx) of
             Nothing -> go (ix+1) numJusts justs
-            Just x -> go (ix+1) numJusts (x:justs) 
+            Just x -> go (ix+1) (numJusts+1) (x:justs) 
         else pure (justs,numJusts)
   !(bs,!numJusts) <- go 0 0 []
   !marr <- unsafeFromListMutableN numJusts bs
@@ -1516,14 +1516,9 @@ reverse :: (Contiguous arr, Element arr a)
   -> arr a
 reverse arr = runST $ do
   marr <- new sz
-  let go !ix = if ix > (-1)
-        then do
-          x <- indexM arr ix
-          write marr ix x
-          go (ix - 1)
-        else return ()
-  go (sz - 1) 
-  unsafeFreeze marr 
+  copy marr 0 arr 0 sz
+  reverseMutable marr
+  unsafeFreeze marr
   where
     !sz = size arr
 {-# inline reverse #-}
@@ -1533,15 +1528,14 @@ reverseMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   -> m ()
 reverseMutable marr = do
   !sz <- sizeMutable marr
-  let go !start !end = if start < end
-        then do
-          atS <- read marr start
-          atE <- read marr end
-          write marr start atE
-          write marr end atS
-          go (start + 1) (end + 1)
-        else pure ()
-  go 0 (sz - 1) 
+  let go !start !end = if start >= end
+        then pure ()
+        else do
+          tmp <- read marr start
+          write marr start =<< read marr end
+          write marr end tmp
+          go (start+1) (end-1)
+  go 0 (sz-1)
 {-# inline reverseMutable #-}
 
 -- | This function does not behave deterministically. Optimization level and
