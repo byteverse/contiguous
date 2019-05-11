@@ -1,27 +1,29 @@
 {-# language GeneralizedNewtypeDeriving #-}
+{-# language ScopedTypeVariables #-}
 {-# language UndecidableInstances #-}
 
 module Main (main) where
 
+import Data.Monoid
+import Data.Primitive
 import Prelude
---import Data.Primitive.Contiguous (Contiguous,Element,Mutable)
-import qualified Data.Primitive.Contiguous as C
-import qualified Prelude as P
-import qualified Data.Maybe as P
 import Test.QuickCheck
 import Test.QuickCheck.Instances ()
+import qualified Data.Maybe as P
+import qualified Data.Primitive.Contiguous as C
 import qualified GHC.Exts as Exts
-import Data.Primitive
+import qualified Prelude as P
 
 main :: IO ()
 main = unitTests  
 
 unitTests :: IO ()
 unitTests = mapM_ printAndTest
-  [ ("Filter", prop_filter)
-  , ("MapMaybe",prop_mapMaybe)
+  [ ("Contiguous.filter = Data.List.filter", prop_filter)
+  , ("Contiguous.mapMaybe = Data.Maybe.mapMaybe",prop_mapMaybe)
   , ("Reverse: reverse . reverse = id", prop_reverse1)
   , ("Contiguous.reverse = Data.List.reverse", prop_reverse2)
+  , ("Contiguous.map = Data.List.map", prop_map)
   ]
 
 printAndTest :: (Testable prop) => (String,prop) -> IO ()
@@ -53,6 +55,11 @@ instance Arbitrary Arr where
     fmap (Arr . Exts.fromList) $ vectorOf k arbitrary
   shrink (Arr xs) = fmap Arr (fmap Exts.fromList $ shrink $ Exts.toList xs)
 
+mean :: forall t a. (Foldable t, Integral a) => t a -> a
+mean xs =
+  let (sum_ :: Sum a,len_ :: Sum a) = foldMap (\x -> (Sum x, Sum 1)) xs
+  in (round :: Double -> a) $ (fromIntegral (getSum sum_) / fromIntegral (getSum len_))
+
 prop_filter :: Arr -> Property
 prop_filter (Arr arr) = property $
   let arrList = C.toList arr
@@ -74,3 +81,8 @@ prop_reverse2 (Arr arr) = property $
   let arrList = C.toList arr
    in P.reverse arrList == C.toList (C.reverse arr)
 
+prop_map :: Arr -> Property
+prop_map (Arr arr) = property $
+  let arrList = C.toList arr
+      f = \(L xs) -> mean xs
+   in P.map f arrList == C.toList (C.map f arr :: Array Int)
