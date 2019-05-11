@@ -82,6 +82,7 @@ module Data.Primitive.Contiguous
    , imapMutable'
    , modify
    , modify'
+   , mapMaybe
     -- ** Monadic mapping
 -- , mapM
 -- , imapM
@@ -871,6 +872,28 @@ ifilter p arr = runST $ do
       unsafeFreeze marrTrues 
   where
     !sz = size arr
+
+-- | store the index of justs in the array, return the length
+--   allocate a new array (b) of the length
+--   read each just value and write to new array
+--   freeze new array
+mapMaybe :: forall arr1 arr2 a b. (Contiguous arr1, Element arr1 a, Contiguous arr2, Element arr2 b)
+  => (a -> Maybe b)
+  -> arr1 a
+  -> arr2 b
+mapMaybe f arr = runST $ do
+  let !sz = size arr 
+  let go :: Int -> Int -> [b] -> ST s ([b],Int)
+      go !ix !numJusts justs = if ix < sz
+        then do
+          atIx <- indexM arr ix
+          case (f atIx) of
+            Nothing -> go (ix+1) numJusts justs
+            Just x -> go (ix+1) numJusts (x:justs) 
+        else pure (justs,numJusts)
+  !(bs,!numJusts) <- go 0 0 []
+  !marr <- unsafeFromListMutableN numJusts bs
+  unsafeFreeze marr 
 
 {-# inline isTrue #-}
 isTrue :: Word8 -> Bool
