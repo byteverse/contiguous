@@ -1,9 +1,6 @@
 {-# language BangPatterns #-}
 {-# language FlexibleInstances #-}
-{-# language FunctionalDependencies #-}
-{-# language KindSignatures #-}
 {-# language MagicHash #-}
-{-# language MultiParamTypeClasses #-}
 {-# language RankNTypes #-}
 {-# language ScopedTypeVariables #-}
 {-# language TypeFamilies #-}
@@ -63,7 +60,7 @@ module Data.Primitive.Contiguous
 -- , enumFromThenTo
     -- ** Concatenation
    , append
-    -- * Modifying arrays
+--    -- * Modifying arrays
 --    -- ** Bulk updates
 --    -- ** Accumulations
     -- ** Permutations
@@ -107,9 +104,9 @@ module Data.Primitive.Contiguous
    , equalsMutable
    , same
     -- * Folds
---   , foldl
+   , foldl
    , foldl'
---   , foldr
+   , foldr
    , foldr'
    , foldMap
    , foldMap'
@@ -119,9 +116,9 @@ module Data.Primitive.Contiguous
    , ifoldlMap'
    , ifoldlMap1'
    , foldlM'
-    -- ** Specialised folds
-    -- ** Monadic folds
-    -- ** Monadic sequencing
+--    -- ** Specialised folds
+--    -- ** Monadic folds
+--    -- ** Monadic sequencing
 
     -- * Traversals
    , traverse
@@ -129,9 +126,7 @@ module Data.Primitive.Contiguous
    , itraverse
    , itraverse_
    , traverseP
-    -- ** Foo
-
-    -- * Prefix sums (scans)
+--    -- * Prefix sums (scans)
 
     -- * Conversions
     -- ** Lists
@@ -159,7 +154,7 @@ module Data.Primitive.Contiguous
     -- * Hashing
    , liftHashWithSalt
 
-    -- * Forcing the contents of an array
+    -- * Forcing an array and its contents
    , rnf
 
     -- * Classes
@@ -167,18 +162,18 @@ module Data.Primitive.Contiguous
   , Always
   ) where
 
-import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate,null,reverse)
-import Control.Monad.ST (runST,ST)
-import Control.Monad.Primitive
+import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr)
 import Control.Applicative (liftA2)
+import Control.DeepSeq (NFData)
+import Control.Monad.Primitive
+import Control.Monad.ST (runST,ST)
 import Data.Bits (xor)
 import Data.Kind (Type)
 import Data.Primitive hiding (fromList,fromListN)
 import Data.Semigroup (Semigroup,(<>))
 import Data.Word (Word8)
-import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#,dataToTag#,Int(..))
-import Control.DeepSeq (NFData)
 import GHC.Base (build)
+import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#,dataToTag#,Int(..))
 
 import qualified Control.DeepSeq as DS
 
@@ -613,6 +608,7 @@ resizeSmallArray !src !sz = do
   dst <- newSmallArray sz errorThunk
   copySmallMutableArray dst 0 src 0 (min sz (sizeofSmallMutableArray src))
   return dst
+{-# inline resizeSmallArray #-}
 
 resizeUnliftedArray :: (PrimMonad m, PrimUnlifted a) => MutableUnliftedArray (PrimState m) a -> Int -> m (MutableUnliftedArray (PrimState m) a)
 resizeUnliftedArray !src !sz = do
@@ -719,6 +715,26 @@ foldr f z arr = go 0
           (# x #) -> f x (go (i+1))
       | otherwise = z
 
+-- | Strict right fold over the elements of an array.
+foldr' :: (Contiguous arr, Element arr a) => (a -> b -> b) -> b -> arr a -> b
+foldr' f !z !ary =
+  let
+    go i !acc
+      | i == -1 = acc
+      | !(# x #) <- index# ary i
+      = go (i-1) (f x acc)
+  in go (size ary - 1) z
+{-# inline foldr' #-}
+
+-- | Left fold over the elements of an array.
+foldl :: (Contiguous arr, Element arr a) => (b -> a -> b) -> b -> arr a -> b
+foldl f z ary = go 0 z
+  where
+    !sz = size ary
+    go !i acc
+      | i == sz = acc
+      | otherwise = let (# x #) = index# ary i in go (i+1) (f acc x)
+
 -- | Strict left fold over the elements of an array.
 foldl' :: (Contiguous arr, Element arr a) => (b -> a -> b) -> b -> arr a -> b
 foldl' f !z !ary =
@@ -726,7 +742,7 @@ foldl' f !z !ary =
     !sz = size ary
     go !i !acc
       | i == sz = acc
-      | (# x #) <- index# ary i = go (i+1) (f acc x)
+      | !(# x #) <- index# ary i = go (i+1) (f acc x)
   in go 0 z
 {-# inline foldl' #-}
 
@@ -740,17 +756,6 @@ ifoldl' f !z !ary =
       | (# x #) <- index# ary i = go (i+1) (f acc i x)
   in go 0 z
 {-# inline ifoldl' #-}
-
--- | Strict right fold over the elements of an array.
-foldr' :: (Contiguous arr, Element arr a) => (a -> b -> b) -> b -> arr a -> b
-foldr' f !z !ary =
-  let
-    go i !acc
-      | i == -1 = acc
-      | (# x #) <- index# ary i
-      = go (i-1) (f x acc)
-  in go (size ary - 1) z
-{-# inline foldr' #-}
 
 -- | Monoidal fold over the element of an array.
 foldMap :: (Contiguous arr, Element arr a, Monoid m) => (a -> m) -> arr a -> m
@@ -835,6 +840,7 @@ filter :: (Contiguous arr, Element arr a)
   -> arr a
   -> arr a
 filter p arr = ifilter (\_ a -> p a) arr
+{-# inline filter #-}
 
 -- | Drop elements that do not satisfy the predicate which
 --   is applied to values and their indices.
@@ -872,6 +878,7 @@ ifilter p arr = runST $ do
       unsafeFreeze marrTrues 
   where
     !sz = size arr
+{-# inline ifilter #-}
 
 -- | store the index of justs in the array, return the length
 --   allocate a new array (b) of the length
@@ -894,6 +901,7 @@ mapMaybe f arr = runST $ do
   !(bs,!numJusts) <- go 0 0 []
   !marr <- unsafeFromListMutableN numJusts bs
   unsafeFreeze marr 
+{-# inline mapMaybe #-}
 
 {-# inline isTrue #-}
 isTrue :: Word8 -> Bool
@@ -1108,7 +1116,8 @@ traverseP f = \ !ary ->
 newtype STA v a = STA {_runSTA :: forall s. Mutable v s a -> ST s (v a)}
 
 runSTA :: (Contiguous v, Element v a) => Int -> STA v a -> v a
-runSTA !sz = \ (STA m) -> runST $ new sz >>= \ ar -> m ar
+runSTA !sz (STA m) = runST $ new sz >>= \ ar -> m ar
+{-# inline runSTA #-}
 
 -- | Map each element of the array to an action, evaluate these
 --   actions from left to right, and collect the results.
@@ -1129,6 +1138,7 @@ traverse f = \ !ary ->
   in if len == 0
      then pure empty
      else runSTA len <$> go 0
+{-# inline traverse #-}
 
 -- | Map each element of the array to an action, evaluate these
 --   actions from left to right, and ignore the results.
@@ -1152,7 +1162,6 @@ itraverse ::
   => (Int -> a -> f b)
   -> arr a
   -> f (arr b)
-{-# inline itraverse #-}
 itraverse f ary =
   let !len = size ary
       go !ix
@@ -1164,6 +1173,7 @@ itraverse f ary =
    in if len == 0
         then pure empty
         else runSTA len <$> go 0
+{-# inline itraverse #-}
 
 -- | Map each element of the array and its index to an action,
 --   evaluate these actions from left to right, and ignore the results.
@@ -1376,6 +1386,7 @@ toListMutable marr = do
           go (ix - 1) (x : acc)
         else return acc
   go (sz - 1) []
+{-# inline toListMutable #-}
 
 -- | Given an 'Int' that is representative of the length of
 --   the list, convert the list into a mutable array of the
