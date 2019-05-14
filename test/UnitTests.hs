@@ -13,6 +13,7 @@ import qualified Data.Maybe as P
 import qualified Data.Primitive.Contiguous as C
 import qualified GHC.Exts as Exts
 import qualified Prelude as P
+import qualified Data.List as P
 
 main :: IO ()
 main = unitTests  
@@ -24,6 +25,7 @@ unitTests = mapM_ printAndTest
   , ("Reverse: reverse . reverse = id", prop_reverse1)
   , ("Contiguous.reverse = Data.List.reverse", prop_reverse2)
   , ("Contiguous.map = Data.List.map", prop_map)
+  , ("Contiguous.unfoldr = Data.List.unfoldr", \_ -> prop_unfoldr)
   ]
 
 printAndTest :: (Testable prop) => (String,prop) -> IO ()
@@ -46,7 +48,7 @@ instance Show L where
 
 instance Arbitrary L where
   arbitrary = do
-    j <- choose (2,4)
+    j <- choose (1,6)
     fmap L $ vectorOf j arbitrary
 
 instance Arbitrary Arr where
@@ -86,3 +88,8 @@ prop_map (Arr arr) = property $
   let arrList = C.toList arr
       f = \(L xs) -> mean xs
    in P.map f arrList == C.toList (C.map f arr :: Array Int)
+
+prop_unfoldr :: Property
+prop_unfoldr = property $
+  let f = \n -> if n == 0 then Nothing else Just (n,n-1)
+   in P.unfoldr f 10 == C.toList (C.unfoldr f 10 :: Array Int)
