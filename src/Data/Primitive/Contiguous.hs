@@ -52,83 +52,85 @@ module Data.Primitive.Contiguous
   , enumFromN
   , enumFromMutableN
     -- ** Concatenation
-   , append
+  , append
     -- * Modifying arrays
     -- ** Permutations
-   , reverse
-   , reverseMutable
+  , reverse
+  , reverseMutable
+    -- ** Resizing
+  , resize
 
     -- * Elementwise operations
     -- ** Mapping
-   , map
-   , map'
-   , mapMutable
-   , mapMutable'
-   , imap
-   , imap'
-   , imapMutable
-   , imapMutable'
-   , modify
-   , modify'
-   , mapMaybe
+  , map
+  , map'
+  , mapMutable
+  , mapMutable'
+  , imap
+  , imap'
+  , imapMutable
+  , imapMutable'
+  , modify
+  , modify'
+  , mapMaybe
 
     -- * Working with predicates
     -- ** Filtering
-   , filter
-   , ifilter
+  , filter
+  , ifilter
     -- ** Comparing for equality
-   , equals
-   , equalsMutable
-   , same
+  , equals
+  , equalsMutable
+  , same
     -- * Folds
-   , foldl
-   , foldl'
-   , foldr
-   , foldr'
-   , foldMap
-   , foldMap'
-   , foldlMap'
-   , ifoldl'
-   , ifoldr'
-   , ifoldlMap'
-   , ifoldlMap1'
-   , foldlM'
+  , foldl
+  , foldl'
+  , foldr
+  , foldr'
+  , foldMap
+  , foldMap'
+  , foldlMap'
+  , ifoldl'
+  , ifoldr'
+  , ifoldlMap'
+  , ifoldlMap1'
+  , foldlM'
 
     -- * Traversals
-   , traverse
-   , traverse_
-   , itraverse
-   , itraverse_
-   , traverseP
+  , traverse
+  , traverse_
+  , itraverse
+  , itraverse_
+  , traverseP
 
     -- * Conversions
     -- ** Lists
-   , fromList
-   , fromListN
-   , fromListMutable
-   , fromListMutableN
-   , unsafeFromListN
-   , unsafeFromListReverseN
-   , toList
-   , toListMutable
+  , fromList
+  , fromListN
+  , fromListMutable
+  , fromListMutableN
+  , unsafeFromListN
+  , unsafeFromListReverseN
+  , toList
+  , toListMutable
     -- ** Other array types
-   , convert
-   , lift
-   , unlift
+  , convert
+  , lift
+  , unlift
     -- ** Between mutable and immutable variants
-   , clone
-   , cloneMutable
-   , copy
-   , copyMutable
-   , freeze
-   , thaw
-   , unsafeFreeze
+  , clone
+  , cloneMutable
+  , copy
+  , copyMutable
+  , freeze
+  , thaw
+  , unsafeFreeze
 
     -- * Hashing
-   , liftHashWithSalt
+  , liftHashWithSalt
 
     -- * Forcing an array and its contents
-   , rnf
+  , rnf
 
     -- * Classes
   , Contiguous(Mutable,Element)
