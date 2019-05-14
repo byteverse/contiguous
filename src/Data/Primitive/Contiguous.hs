@@ -880,12 +880,12 @@ mapMaybe f arr = runST $ do
       go !ix !numJusts justs = if ix < sz
         then do
           atIx <- indexM arr ix
-          case (f atIx) of
+          case f atIx of
             Nothing -> go (ix+1) numJusts justs
             Just x -> go (ix+1) (numJusts+1) (x:justs) 
         else pure (justs,numJusts)
   !(bs,!numJusts) <- go 0 0 []
-  !marr <- unsafeFromListMutableN numJusts bs
+  !marr <- unsafeFromListReverseMutableN numJusts bs
   unsafeFreeze marr 
 {-# inline mapMaybe #-}
 
