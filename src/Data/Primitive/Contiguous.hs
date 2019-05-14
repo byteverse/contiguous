@@ -301,7 +301,7 @@ instance Contiguous SmallArray where
     _ -> False
   freeze = freezeSmallArray
   size = sizeofSmallArray
-  sizeMutable = return . sizeofSmallMutableArray
+  sizeMutable = pure . sizeofSmallMutableArray
   unsafeFreeze = unsafeFreezeSmallArray
   thaw = thawSmallArray
   equals = (==)
@@ -373,7 +373,7 @@ instance Contiguous PrimArray where
   replicateMutable = replicateMutablePrimArray
   index = indexPrimArray
   index# arr ix = (# indexPrimArray arr ix #)
-  indexM arr ix = return (indexPrimArray arr ix)
+  indexM arr ix = pure (indexPrimArray arr ix)
   read = readPrimArray
   write = writePrimArray
   resize = resizeMutablePrimArray
@@ -519,7 +519,7 @@ instance Contiguous UnliftedArray where
   replicateMutable = newUnliftedArray
   index = indexUnliftedArray
   index# arr ix = (# indexUnliftedArray arr ix #)
-  indexM arr ix = return (indexUnliftedArray arr ix)
+  indexM arr ix = pure (indexUnliftedArray arr ix)
   read = readUnliftedArray
   write = writeUnliftedArray
   resize = resizeUnliftedArray
@@ -600,21 +600,21 @@ resizeArray :: PrimMonad m => MutableArray (PrimState m) a -> Int -> m (MutableA
 resizeArray !src !sz = do
   dst <- newArray sz errorThunk
   copyMutableArray dst 0 src 0 (min sz (sizeofMutableArray src))
-  return dst
+  pure dst
 {-# inline resizeArray #-}
 
 resizeSmallArray :: PrimMonad m => SmallMutableArray (PrimState m) a -> Int -> m (SmallMutableArray (PrimState m) a)
 resizeSmallArray !src !sz = do
   dst <- newSmallArray sz errorThunk
   copySmallMutableArray dst 0 src 0 (min sz (sizeofSmallMutableArray src))
-  return dst
+  pure dst
 {-# inline resizeSmallArray #-}
 
 resizeUnliftedArray :: (PrimMonad m, PrimUnlifted a) => MutableUnliftedArray (PrimState m) a -> Int -> m (MutableUnliftedArray (PrimState m) a)
 resizeUnliftedArray !src !sz = do
   dst <- unsafeNewUnliftedArray sz
   copyMutableUnliftedArray dst 0 src 0 (min sz (sizeofMutableUnliftedArray src))
-  return dst
+  pure dst
 {-# inline resizeUnliftedArray #-}
 
 emptyUnliftedArray :: UnliftedArray a
@@ -637,7 +637,7 @@ imap :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (I
 imap f a = runST $ do
   mb <- new (size a)
   let go !i
-        | i == size a = return ()
+        | i == size a = pure ()
         | otherwise = do
             x <- indexM a i
             write mb i (f i x)
@@ -654,7 +654,7 @@ imap' :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (
 imap' f a = runST $ do
   mb <- new (size a)
   let go !i
-        | i == size a = return ()
+        | i == size a = pure ()
         | otherwise = do
             x <- indexM a i
             let !b = f i x
@@ -672,7 +672,7 @@ map :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (b 
 map f a = runST $ do
   mb <- new (size a)
   let go !i
-        | i == size a = return ()
+        | i == size a = pure ()
         | otherwise = do
             x <- indexM a i
             write mb i (f x)
@@ -689,7 +689,7 @@ map' :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (b
 map' f a = runST $ do
   mb <- new (size a)
   let go !i
-        | i == size a = return ()
+        | i == size a = pure ()
         | otherwise = do
             x <- indexM a i
             let !b = f x
@@ -831,7 +831,7 @@ foldlM' f z0 arr = go 0 z0
           let (# x #) = index# arr i
           acc2 <- f acc1 x
           go (i + 1) acc2
-      | otherwise = return acc1
+      | otherwise = pure acc1
 {-# inline foldlM' #-}
 
 -- | Drop elements that do not satisfy the predicate.
@@ -912,7 +912,7 @@ thawPrimArray :: (PrimMonad m, Prim a) => PrimArray a -> Int -> Int -> m (Mutabl
 thawPrimArray !arr !off !len = do
   marr <- newPrimArray len
   copyPrimArray marr 0 arr off len
-  return marr
+  pure marr
 {-# inline thawPrimArray #-}
 
 clonePrimArray :: Prim a => PrimArray a -> Int -> Int -> PrimArray a
@@ -926,7 +926,7 @@ cloneMutablePrimArray :: (PrimMonad m, Prim a) => MutablePrimArray (PrimState m)
 cloneMutablePrimArray !arr !off !len = do
   marr <- newPrimArray len
   copyMutablePrimArray marr 0 arr off len
-  return marr
+  pure marr
 {-# inline cloneMutablePrimArray #-}
 
 -- | @'replicate' n x@ is an array of length @n@ with @x@ the value of every element.
@@ -946,9 +946,9 @@ replicateMutableM len act = do
           x <- act
           write marr ix x
           go (ix + 1)
-        else return ()
+        else pure ()
   go 0
-  return marr
+  pure marr
 {-# inline replicateMutableM #-}
 
 replicateMutablePrimArray :: (PrimMonad m, Prim a)
@@ -958,7 +958,7 @@ replicateMutablePrimArray :: (PrimMonad m, Prim a)
 replicateMutablePrimArray len a = do
   marr <- newPrimArray len
   setPrimArray marr 0 len a
-  return marr
+  pure marr
 {-# inline replicateMutablePrimArray #-}
 
 replicateSmallMutableArray :: (PrimMonad m)
@@ -969,9 +969,9 @@ replicateSmallMutableArray len a = do
   marr <- newSmallArray len errorThunk
   let go !ix = if ix < len
         then writeSmallArray marr ix a >> go (ix + 1)
-        else return ()
+        else pure ()
   go 0
-  return marr
+  pure marr
 {-# inline replicateSmallMutableArray #-}
 
 -- | Create an array from a list. If the given length does
@@ -990,7 +990,7 @@ unsafeFromListMutableN :: (Contiguous arr, Element arr a, PrimMonad m)
   -> m (Mutable arr (PrimState m) a)
 unsafeFromListMutableN n l = do
   m <- new n
-  let go !_ [] = return m
+  let go !_ [] = pure m
       go !ix (x : xs) = do
         write m ix x
         go (ix+1) xs
@@ -1006,7 +1006,7 @@ unsafeFromListReverseMutableN :: (Contiguous arr, Element arr a, PrimMonad m)
   -> m (Mutable arr (PrimState m) a)
 unsafeFromListReverseMutableN n l = do
   m <- new n
-  let go !_ [] = return m
+  let go !_ [] = pure m
       go !ix (x : xs) = do
         write m ix x
         go (ix-1) xs
@@ -1205,7 +1205,7 @@ generateMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   => Int
   -> (Int -> a)
   -> m (Mutable arr (PrimState m) a)
-generateMutable len f = generateMutableM len (return . f)
+generateMutable len f = generateMutableM len (pure . f)
 {-# inline generateMutable #-}
 
 -- | Construct a mutable array of the given length by applying
@@ -1221,9 +1221,9 @@ generateMutableM !len f = do
           x <- f ix
           write marr ix x
           go (ix + 1)
-        else return ()
+        else pure ()
   go 0
-  return marr
+  pure marr
 {-# inline generateMutableM #-}
 
 -- | Apply a function @n@ times to a value and construct an array
@@ -1247,7 +1247,7 @@ iterateMutableN :: (Contiguous arr, Element arr a, PrimMonad m)
   -> (a -> a)
   -> a 
   -> m (Mutable arr (PrimState m) a)
-iterateMutableN len f z0 = iterateMutableNM len (return . f) z0
+iterateMutableN len f z0 = iterateMutableNM len (pure . f) z0
 {-# inline iterateMutableN #-}
 
 -- | Apply a monadic function @n@ times to a value and construct a mutable array
@@ -1265,13 +1265,13 @@ iterateMutableNM !len f z0 = do
   -- thunks for no reason.
   let go !ix !acc
         | ix <= 0 = write marr ix z0 >> go (ix + 1) z0
-        | ix == len = return ()
+        | ix == len = pure ()
         | otherwise = do
             a <- f acc
             write marr ix a
             go (ix + 1) a
   go 0 z0
-  return marr
+  pure marr
 {-# inline iterateMutableNM #-}
 
 -- | Execute the monad action and freeze the resulting array.
@@ -1321,7 +1321,7 @@ unfoldrMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   -> m (Mutable arr (PrimState m) a)
 unfoldrMutable f z0 = do
   let go !sz s !xs = case f s of
-        Nothing -> return (sz,xs)
+        Nothing -> pure (sz,xs)
         Just (x,s') -> go (sz + 1) s' (x : xs)
   (sz,xs) <- go 0 z0 []
   unsafeFromListReverseMutableN sz xs
@@ -1352,14 +1352,14 @@ unfoldrMutableN !maxSz f z0 = do
   m <- new maxSz
   let go !ix s = if ix < maxSz
         then case f s of
-          Nothing -> return ix
+          Nothing -> pure ix
           Just (x,s') -> do
             write m ix x
             go (ix + 1) s'
-        else return ix
+        else pure ix
   sz <- go 0 z0
   case compare maxSz sz of
-    EQ -> return m
+    EQ -> pure m
     GT -> resize m sz
     LT -> error "Data.Primitive.Contiguous.unfoldrMutableN: internal error"
 {-# inline unfoldrMutableN #-}
@@ -1384,7 +1384,7 @@ toListMutable marr = do
         then do
           x <- read marr ix
           go (ix - 1) (x : acc)
-        else return acc
+        else pure acc
   go (sz - 1) []
 {-# inline toListMutable #-}
 
@@ -1400,7 +1400,7 @@ fromListMutableN :: (Contiguous arr, Element arr a, PrimMonad m)
 fromListMutableN len vs = do
   marr <- new len
   let go [] !ix = if ix == len
-        then return ()
+        then pure ()
         else error "Data.Primitive.Contiguous.fromListN: list length less than specified size."
       go (a:as) !ix = if ix < len
         then do
@@ -1408,7 +1408,7 @@ fromListMutableN len vs = do
           go as (ix + 1)
         else error "Data.Primitive.Contiguous.fromListN: list length greater than specified size."
   go vs 0
-  return marr 
+  pure marr 
 {-# inline fromListMutableN #-}
 
 -- | Convert a list into a mutable array of the given length.
@@ -1449,7 +1449,7 @@ modify f marr = do
           x <- read marr ix
           write marr ix (f x)
           go (ix + 1)
-        else return ()
+        else pure ()
   go 0
 {-# inline modify #-}
 
@@ -1466,7 +1466,7 @@ modify' f marr = do
           let !y = f x
           write marr ix y
           go (ix + 1)
-        else return ()
+        else pure ()
   go 0
 {-# inline modify' #-}
 
@@ -1491,7 +1491,7 @@ enumFromMutableN z0 !sz = do
         then do
           write m ix z
           go (ix + 1) (succ z)
-        else return m
+        else pure m
   go 0 z0
 {-# inline enumFromMutableN #-}
 
