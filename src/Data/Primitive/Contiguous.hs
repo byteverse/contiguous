@@ -880,10 +880,10 @@ ifilter p arr = runST $ do
     !sz = size arr
 {-# inline ifilter #-}
 
--- | store the index of justs in the array, return the length
---   allocate a new array (b) of the length
---   read each just value and write to new array
---   freeze new array
+-- | The 'mapMaybe' function is a version of 'map' which can throw out elements.
+--   In particular, the functional arguments returns something of type @'Maybe' b@.
+--   If this is 'Nothing', no element is added on to the result array. If it is
+--   @'Just' b@, then @b@ is included in the result array.
 mapMaybe :: forall arr1 arr2 a b. (Contiguous arr1, Element arr1 a, Contiguous arr2, Element arr2 b)
   => (a -> Maybe b)
   -> arr1 a
