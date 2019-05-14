@@ -71,7 +71,6 @@ module Data.Primitive.Contiguous
    , modify
    , modify'
    , mapMaybe
-    -- ** Monadic mapping
 
     -- * Working with predicates
     -- ** Filtering
