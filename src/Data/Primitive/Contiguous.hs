@@ -48,21 +48,12 @@ module Data.Primitive.Contiguous
   , unfoldr
   , unfoldrN
   , unfoldrMutable
---  , unfoldrMutableM
---  , unfoldrMutableNM
---  , constructN
---  , constructrN
     -- ** Enumeration
   , enumFromN
   , enumFromMutableN
--- , enumFromStepN
--- , enumFromTo
--- , enumFromThenTo
     -- ** Concatenation
    , append
---    -- * Modifying arrays
---    -- ** Bulk updates
---    -- ** Accumulations
+    -- * Modifying arrays
     -- ** Permutations
    , reverse
    , reverseMutable
@@ -81,24 +72,11 @@ module Data.Primitive.Contiguous
    , modify'
    , mapMaybe
     -- ** Monadic mapping
--- , mapM
--- , imapM
--- , mapM_
--- , imapM_
--- , forM
--- , forM_
-    -- ** Zipping
--- , zipWith
--- , izipWith
-    -- ** Monadic zipping
-    -- ** Unzipping
 
     -- * Working with predicates
     -- ** Filtering
    , filter
    , ifilter
-    -- ** Partitioning
-    -- ** Searching
     -- ** Comparing for equality
    , equals
    , equalsMutable
@@ -112,13 +90,10 @@ module Data.Primitive.Contiguous
    , foldMap'
    , foldlMap'
    , ifoldl'
---   , ifoldr'
+   , ifoldr'
    , ifoldlMap'
    , ifoldlMap1'
    , foldlM'
---    -- ** Specialised folds
---    -- ** Monadic folds
---    -- ** Monadic sequencing
 
     -- * Traversals
    , traverse
@@ -126,7 +101,6 @@ module Data.Primitive.Contiguous
    , itraverse
    , itraverse_
    , traverseP
---    -- * Prefix sums (scans)
 
     -- * Conversions
     -- ** Lists
@@ -746,7 +720,8 @@ foldl' f !z !ary =
   in go 0 z
 {-# inline foldl' #-}
 
--- | Strict left fold over the elements of an array.
+-- | Strict left fold over the elements of an array, where the accumulating
+--   function cares about the index of the element.
 ifoldl' :: (Contiguous arr, Element arr a) => (b -> Int -> a -> b) -> b -> arr a -> b
 ifoldl' f !z !ary =
   let
@@ -757,6 +732,17 @@ ifoldl' f !z !ary =
   in go 0 z
 {-# inline ifoldl' #-}
 
+-- | Strict right fold over the elements of an array, where the accumulating
+--   function cares about the index of the element.
+ifoldr' :: (Contiguous arr, Element arr a) => (Int -> a -> b -> b) -> b -> arr a -> b
+ifoldr' f !z !arr =
+  let !sz = size arr
+      go !i !acc = if i == (-1)
+        then acc
+        else let !(# x #) = index# arr i in go (i-1) (f i x acc)
+   in go (sz-1) z
+{-# inline ifoldr' #-}
+             
 -- | Monoidal fold over the element of an array.
 foldMap :: (Contiguous arr, Element arr a, Monoid m) => (a -> m) -> arr a -> m
 foldMap f arr = go 0
