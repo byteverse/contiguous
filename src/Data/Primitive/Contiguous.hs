@@ -1282,7 +1282,7 @@ createT p = runST (mapM unsafeFreeze =<< p)
 --   > unfoldr (\n -> if n == 0 then Nothing else Just (n,n-1) 10
 --   > <10,9,8,7,6,5,4,3,2,1>
 
--- unfortunately, because we don't know ahead of time when to stop,
+-- Unfortunately, because we don't know ahead of time when to stop,
 -- we need to construct a list and then turn it into an array.
 unfoldr :: (Contiguous arr, Element arr a)
   => (b -> Maybe (a,b))
@@ -1299,7 +1299,7 @@ unfoldr f z0 = create (unfoldrMutable f z0)
 --   > unfoldrMutable (\n -> if n == 0 then Nothing else Just (n,n-1) 10
 --   > <10,9,8,7,6,5,4,3,2,1>
 
--- unfortunately, because we don't know ahead of time when to stop,
+-- Unfortunately, because we don't know ahead of time when to stop,
 -- we need to construct a list and then turn it into an array.
 unfoldrMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   => (b -> Maybe (a,b))
