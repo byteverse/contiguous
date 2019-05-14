@@ -1366,7 +1366,7 @@ toListMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   -> m [a]
 toListMutable marr = do
   sz <- sizeMutable marr
-  let go !ix acc = if ix >= 0
+  let go !ix !acc = if ix >= 0
         then do
           x <- read marr ix
           go (ix - 1) (x : acc)
