@@ -4,6 +4,7 @@
 
 module Main (main) where
 
+import Data.Functor.Identity (Identity(..))
 import Data.Monoid
 import Data.Primitive
 import Prelude
@@ -30,6 +31,7 @@ unitTests = mapM_ printAndTest
   , ("Contiguous.map = Data.List.map", prop_map)
   , ("Contiguous.unfoldr = Data.List.unfoldr", \_ -> prop_unfoldr)
   , ("Contiguous.unfoldrN = Data.Vector.unfoldrN", \_ -> prop_unfoldrN)
+  , ("Contiguous.traverse = Data.Traversable.traverse", prop_traverse)
   ]
 
 printAndTest :: (Testable prop) => (String, prop) -> IO ()
@@ -103,4 +105,16 @@ prop_unfoldrN :: Property
 prop_unfoldrN = property $
   let f = \n -> if n == 0 then Nothing else Just (n,n-1)
       sz = 100
-   in V.toList (V.unfoldrN sz f 10) == C.toList (C.unfoldrN sz f 10 :: Array Int) 
+   in V.toList (V.unfoldrN sz f 10) == C.toList (C.unfoldrN sz f 10 :: Array Int)
+
+prop_traverse :: Arr -> Property
+prop_traverse (Arr arr) = property $
+  let arrList = C.toList arr
+      f = \(L xs) -> Identity (sum xs)
+   in runIdentity (P.traverse f arrList) == C.toList (runIdentity (C.traverse f arr))
+
+--prop_itraverse :: Arr -> Property
+--prop_itraverse (Arr arr) = property $
+--  let arrVec = V.fromList (C.toList arr)
+--      f = \i (L xs) -> Identity (i + sum xs)
+--   in V.toList (V.itraverse f arrVec) == C.toList (C.itraverse f arr)
