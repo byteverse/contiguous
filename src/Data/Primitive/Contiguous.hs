@@ -111,6 +111,7 @@ module Data.Primitive.Contiguous
   , fromListMutableN
   , unsafeFromListN
   , unsafeFromListReverseN
+  , unsafeFromListReverseMutableN
   , toList
   , toListMutable
     -- ** Other array types
@@ -1458,7 +1459,7 @@ modify' f marr = do
 {-# inline modify' #-}
 
 -- | Yield an array of the given length containing the values
---   @x, x+1@ etc.
+--   @x, 'succ' x, 'succ' ('succ' x)@ etc.
 enumFromN :: (Contiguous arr, Element arr a, Enum a)
   => a
   -> Int
@@ -1467,7 +1468,7 @@ enumFromN z0 sz = create (enumFromMutableN z0 sz)
 {-# inline enumFromN #-}
 
 -- | Yield a mutable array of the given length containing the values
---   @x, x+1@ etc.
+--   @x, 'succ' x, 'succ' ('succ' x)@ etc.
 enumFromMutableN :: (Contiguous arr, Element arr a, PrimMonad m, Enum a)
   => a
   -> Int
@@ -1498,6 +1499,7 @@ liftHashWithSalt f s0 arr = go 0 s0 where
     else hashIntWithSalt s ix
 {-# inline liftHashWithSalt #-}
 
+-- | Reverse the elements of an array.
 reverse :: (Contiguous arr, Element arr a)
   => arr a
   -> arr a
@@ -1510,6 +1512,7 @@ reverse arr = runST $ do
     !sz = size arr
 {-# inline reverse #-}
 
+-- | Reverse the elements of a mutable array, in-place.
 reverseMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   => Mutable arr (PrimState m) a
   -> m ()
@@ -1527,9 +1530,9 @@ reverseMutable marr = do
 
 -- | This function does not behave deterministically. Optimization level and
 -- inlining can affect its results. However, the one thing that can be counted
--- on is that if it returns @True@, the two immutable arrays are definitely the
+-- on is that if it returns 'True', the two immutable arrays are definitely the
 -- same. This is useful as shortcut for equality tests. However, keep in mind
--- that a result of @False@ tells us nothing about the arguments.
+-- that a result of 'False' tells us nothing about the arguments.
 same :: Contiguous arr => arr a -> arr a -> Bool
 same a b = isTrue# (sameMutableArrayArray# (unsafeCoerce# (unlift a) :: MutableArrayArray# s) (unsafeCoerce# (unlift b) :: MutableArrayArray# s))
 
