@@ -14,9 +14,12 @@ import qualified Data.Primitive.Contiguous as C
 import qualified GHC.Exts as Exts
 import qualified Prelude as P
 import qualified Data.List as P
+import qualified Data.Vector as V
 
 main :: IO ()
-main = unitTests  
+main = do
+  putStr "\n"
+  unitTests  
 
 unitTests :: IO ()
 unitTests = mapM_ printAndTest
@@ -26,9 +29,10 @@ unitTests = mapM_ printAndTest
   , ("Contiguous.reverse = Data.List.reverse", prop_reverse2)
   , ("Contiguous.map = Data.List.map", prop_map)
   , ("Contiguous.unfoldr = Data.List.unfoldr", \_ -> prop_unfoldr)
+  , ("Contiguous.unfoldrN = Data.Vector.unfoldrN", \_ -> prop_unfoldrN)
   ]
 
-printAndTest :: (Testable prop) => (String,prop) -> IO ()
+printAndTest :: (Testable prop) => (String, prop) -> IO ()
 printAndTest (x,y) = do
   putStrLn $ P.replicate (length x + 6) '-'
   putStrLn $ "-- " ++ x ++ " --"
@@ -92,4 +96,11 @@ prop_map (Arr arr) = property $
 prop_unfoldr :: Property
 prop_unfoldr = property $
   let f = \n -> if n == 0 then Nothing else Just (n,n-1)
-   in P.unfoldr f 10 == C.toList (C.unfoldr f 10 :: Array Int)
+      sz = 10
+   in P.unfoldr f sz == C.toList (C.unfoldr f sz :: Array Int)
+
+prop_unfoldrN :: Property
+prop_unfoldrN = property $
+  let f = \n -> if n == 0 then Nothing else Just (n,n-1)
+      sz = 100
+   in V.toList (V.unfoldrN sz f 10) == C.toList (C.unfoldrN sz f 10 :: Array Int) 
