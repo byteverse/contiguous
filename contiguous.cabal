@@ -1,6 +1,6 @@
 cabal-version: 2.0
 name: contiguous
-version: 0.3.3.0
+version: 0.4
 homepage: https://github.com/andrewthad/contiguous
 bug-reports: https://github.com/andrewthad/contiguous/issues
 author: Andrew Martin
@@ -11,7 +11,7 @@ license-file: LICENSE
 build-type: Simple
 extra-source-files: README.md
 synopsis: Unified interface for primitive arrays
-category: Array
+category: Array,Data,Primitive
 description:
   This package provides a typeclass `Contiguous` that offers a
   unified interface to working with `Array`, `SmallArray`,
