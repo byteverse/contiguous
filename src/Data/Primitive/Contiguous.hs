@@ -146,6 +146,8 @@ import Control.Monad.ST (runST,ST)
 import Data.Bits (xor)
 import Data.Kind (Type)
 import Data.Primitive hiding (fromList,fromListN)
+import Data.Primitive.Unlifted.Array
+import Data.Primitive.Unlifted.Class (PrimUnlifted)
 import Data.Semigroup (Semigroup,(<>))
 import Data.Word (Word8)
 import GHC.Base (build)
@@ -307,8 +309,8 @@ instance Contiguous SmallArray where
      in go 0
   clone = cloneSmallArray
   cloneMutable = cloneSmallMutableArray
-  lift = fromArrayArray#
-  unlift = toArrayArray#
+  lift x = SmallArray (unsafeCoerce# x)
+  unlift (SmallArray x) = unsafeCoerce# x
   copy = copySmallArray
   copyMutable = copySmallMutableArray
   replicateMutable = replicateSmallMutableArray
@@ -363,8 +365,8 @@ instance Contiguous PrimArray where
   clone = clonePrimArray
   cloneMutable = cloneMutablePrimArray
   equals = (==)
-  unlift = toArrayArray#
-  lift = fromArrayArray#
+  unlift (PrimArray x) = unsafeCoerce# x
+  lift x = PrimArray (unsafeCoerce# x)
   null (PrimArray a) = case sizeofByteArray# a of
     0# -> True
     _ -> False
@@ -435,8 +437,8 @@ instance Contiguous Array where
   clone = cloneArray
   cloneMutable = cloneMutableArray
   equals = (==)
-  unlift = toArrayArray#
-  lift = fromArrayArray#
+  unlift (Array x) = unsafeCoerce# x
+  lift x = Array (unsafeCoerce# x)
   null (Array a) = case sizeofArray# a of
     0# -> True
     _ -> False
@@ -509,8 +511,8 @@ instance Contiguous UnliftedArray where
   clone = cloneUnliftedArray
   cloneMutable = cloneMutableUnliftedArray
   equals = (==)
-  unlift = toArrayArray#
-  lift = fromArrayArray#
+  unlift (UnliftedArray x) = x
+  lift x = UnliftedArray x
   null (UnliftedArray a) = case sizeofArrayArray# a of
     0# -> True
     _ -> False
@@ -592,10 +594,6 @@ resizeUnliftedArray !src !sz = do
   copyMutableUnliftedArray dst 0 src 0 (min sz (sizeofMutableUnliftedArray src))
   pure dst
 {-# inline resizeUnliftedArray #-}
-
-emptyUnliftedArray :: UnliftedArray a
-emptyUnliftedArray = runST (unsafeNewUnliftedArray 0 >>= unsafeFreezeUnliftedArray)
-{-# noinline emptyUnliftedArray #-}
 
 -- | Append two arrays.
 append :: (Contiguous arr, Element arr a) => arr a -> arr a -> arr a
