@@ -20,7 +20,7 @@ import qualified Data.Vector as V
 main :: IO ()
 main = do
   putStr "\n"
-  unitTests  
+  unitTests
 
 unitTests :: IO ()
 unitTests = mapM_ printAndTest
@@ -32,6 +32,7 @@ unitTests = mapM_ printAndTest
   , ("Contiguous.unfoldr = Data.List.unfoldr", \_ -> prop_unfoldr)
   , ("Contiguous.unfoldrN = Data.Vector.unfoldrN", \_ -> prop_unfoldrN)
   , ("Contiguous.traverse = Data.Traversable.traverse", prop_traverse)
+  , ("Contiguous.find = Data.Foldable.find", prop_find)
   ]
 
 printAndTest :: (Testable prop) => (String, prop) -> IO ()
@@ -40,7 +41,7 @@ printAndTest (x,y) = do
   putStrLn $ "-- " ++ x ++ " --"
   putStrLn $ P.replicate (length x + 6) '-'
   putStr "\n"
-  quickCheck y 
+  quickCheck y
   putStr "\n"
 
 newtype Arr = Arr (Array L)
@@ -118,3 +119,10 @@ prop_traverse (Arr arr) = property $
 --  let arrVec = V.fromList (C.toList arr)
 --      f = \i (L xs) -> Identity (i + sum xs)
 --   in V.toList (V.itraverse f arrVec) == C.toList (C.itraverse f arr)
+
+prop_find :: Arr -> Property
+prop_find (Arr arr) = property $
+  let arrList = C.toList arr
+      f = \(L xs) -> even (sum xs)
+   in P.find f arrList == C.find f arr
+

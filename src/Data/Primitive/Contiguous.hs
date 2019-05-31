@@ -78,6 +78,8 @@ module Data.Primitive.Contiguous
     -- ** Filtering
   , filter
   , ifilter
+    -- ** Searching
+  , find
     -- ** Comparing for equality
   , equals
   , equalsMutable
@@ -144,11 +146,12 @@ import Control.DeepSeq (NFData)
 import Control.Monad.Primitive
 import Control.Monad.ST (runST,ST)
 import Data.Bits (xor)
+import Data.Coerce (coerce)
 import Data.Kind (Type)
 import Data.Primitive hiding (fromList,fromListN)
 import Data.Primitive.Unlifted.Array
 import Data.Primitive.Unlifted.Class (PrimUnlifted)
-import Data.Semigroup (Semigroup,(<>))
+import Data.Semigroup (Semigroup,(<>),First(First))
 import Data.Word (Word8)
 import GHC.Base (build)
 import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#,dataToTag#,Int(..))
@@ -269,7 +272,7 @@ instance Contiguous SmallArray where
   type Element SmallArray = Always
   empty = mempty
   new n = newSmallArray n errorThunk
-  index = indexSmallArray 
+  index = indexSmallArray
   indexM = indexSmallArrayM
   index# = indexSmallArray##
   read = readSmallArray
@@ -299,7 +302,7 @@ instance Contiguous SmallArray where
     writeSmallArray m 1 b
     writeSmallArray m 2 c
     unsafeFreezeSmallArray m
-  rnf !ary = 
+  rnf !ary =
     let !sz = sizeofSmallArray ary
         go !ix = if ix < sz
           then
@@ -390,7 +393,7 @@ instance Contiguous PrimArray where
   {-# inline empty #-}
   {-# inline null #-}
   {-# inline new #-}
-  {-# inline replicateMutable #-} 
+  {-# inline replicateMutable #-}
   {-# inline index #-}
   {-# inline index# #-}
   {-# inline indexM #-}
@@ -443,7 +446,7 @@ instance Contiguous Array where
     0# -> True
     _ -> False
   equalsMutable = sameMutableArray
-  rnf !ary = 
+  rnf !ary =
     let !sz = sizeofArray ary
         go !i
           | i == sz = ()
@@ -517,7 +520,7 @@ instance Contiguous UnliftedArray where
     0# -> True
     _ -> False
   equalsMutable = sameMutableUnliftedArray
-  rnf !ary = 
+  rnf !ary =
     let !sz = sizeofUnliftedArray ary
         go !i
           | i == sz = ()
@@ -635,7 +638,7 @@ imap' f a = runST $ do
             write mb i b
             go (i + 1)
   go 0
-  unsafeFreeze mb 
+  unsafeFreeze mb
 {-# INLINABLE imap' #-}
 
 -- | Map over the elements of an array.
@@ -742,7 +745,7 @@ ifoldr' f !z !arr =
         else let !(# x #) = index# arr i in go (i-1) (f i x acc)
    in go (sz-1) z
 {-# inline ifoldr' #-}
-             
+
 -- | Monoidal fold over the element of an array.
 foldMap :: (Contiguous arr, Element arr a, Monoid m) => (a -> m) -> arr a -> m
 foldMap f arr = go 0
@@ -861,7 +864,7 @@ ifilter p arr = runST $ do
                 else go2 (ixSrc + 1) ixDst
             else pure ()
       go2 0 0
-      unsafeFreeze marrTrues 
+      unsafeFreeze marrTrues
   where
     !sz = size arr
 {-# inline ifilter #-}
@@ -875,18 +878,18 @@ mapMaybe :: forall arr1 arr2 a b. (Contiguous arr1, Element arr1 a, Contiguous a
   -> arr1 a
   -> arr2 b
 mapMaybe f arr = runST $ do
-  let !sz = size arr 
+  let !sz = size arr
   let go :: Int -> Int -> [b] -> ST s ([b],Int)
       go !ix !numJusts justs = if ix < sz
         then do
           atIx <- indexM arr ix
           case f atIx of
             Nothing -> go (ix+1) numJusts justs
-            Just x -> go (ix+1) (numJusts+1) (x:justs) 
+            Just x -> go (ix+1) (numJusts+1) (x:justs)
         else pure (justs,numJusts)
   !(bs,!numJusts) <- go 0 0 []
   !marr <- unsafeFromListReverseMutableN numJusts bs
-  unsafeFreeze marr 
+  unsafeFreeze marr
 {-# inline mapMaybe #-}
 
 {-# inline isTrue #-}
@@ -998,7 +1001,7 @@ unsafeFromListReverseMutableN n l = do
         go (ix-1) xs
   go (n - 1) l
 {-# inline unsafeFromListReverseMutableN #-}
- 
+
 -- | Create an array from a list, reversing the order of the
 -- elements. If the given length does not match the actual length,
 -- this function has undefined behavior.
@@ -1231,7 +1234,7 @@ iterateN len f z0 = runST (iterateMutableN len f z0 >>= unsafeFreeze)
 iterateMutableN :: (Contiguous arr, Element arr a, PrimMonad m)
   => Int
   -> (a -> a)
-  -> a 
+  -> a
   -> m (Mutable arr (PrimState m) a)
 iterateMutableN len f z0 = iterateMutableNM len (pure . f) z0
 {-# inline iterateMutableN #-}
@@ -1360,7 +1363,7 @@ toList arr = build (\c n -> foldr c n arr)
 -- | Convert a mutable array to a list.
 
 -- I don't think this can be expressed in terms of foldr/build,
--- so we just loop through the array. 
+-- so we just loop through the array.
 toListMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   => Mutable arr (PrimState m) a
   -> m [a]
@@ -1394,7 +1397,7 @@ fromListMutableN len vs = do
           go as (ix + 1)
         else error "Data.Primitive.Contiguous.fromListN: list length greater than specified size."
   go vs 0
-  pure marr 
+  pure marr
 {-# inline fromListMutableN #-}
 
 -- | Convert a list into a mutable array of the given length.
@@ -1491,7 +1494,7 @@ liftHashWithSalt :: (Contiguous arr, Element arr a)
 liftHashWithSalt f s0 arr = go 0 s0 where
   sz = size arr
   go !ix !s = if ix < sz
-    then 
+    then
       let !(# x #) = index# arr ix
        in go (ix + 1) (f s x)
     else hashIntWithSalt s ix
@@ -1541,3 +1544,13 @@ hashIntWithSalt salt x = salt `combine` x
 combine :: Int -> Int -> Int
 combine h1 h2 = (h1 * 16777619) `xor` h2
 {-# inline combine #-}
+
+-- | 'find' takes a predicate and an array, and returns the leftmost
+--   element of the array matching the prediate, or 'Nothing' if there
+--   is no such predicate.
+find :: (Contiguous arr, Element arr a)
+  => (a -> Bool)
+  -> arr a
+  -> Maybe a
+find p = fmap coerce (foldMap (\x -> if p x then Just (First x) else Nothing))
+{-# inline find #-}
