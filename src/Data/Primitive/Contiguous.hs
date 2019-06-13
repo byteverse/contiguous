@@ -1,5 +1,6 @@
 {-# language BangPatterns #-}
 {-# language FlexibleInstances #-}
+{-# language ForeignFunctionInterface #-}
 {-# language MagicHash #-}
 {-# language RankNTypes #-}
 {-# language ScopedTypeVariables #-}
@@ -73,6 +74,8 @@ module Data.Primitive.Contiguous
   , modify
   , modify'
   , mapMaybe
+    -- ** Specific elements
+  , swap
 
     -- * Working with predicates
     -- ** Filtering
@@ -1554,3 +1557,16 @@ find :: (Contiguous arr, Element arr a)
   -> Maybe a
 find p = fmap coerce (foldMap (\x -> if p x then Just (First x) else Nothing))
 {-# inline find #-}
+
+-- | Swap the elements of the mutable array at the given indices.
+swap :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Mutable arr (PrimState m) a
+  -> Int
+  -> Int
+  -> m ()
+swap !marr !ix1 !ix2 = do
+  atIx1 <- read marr ix1
+  atIx2 <- read marr ix2
+  write marr ix1 atIx2
+  write marr ix2 atIx1
+{-# inline swap #-}
