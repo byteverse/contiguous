@@ -1555,7 +1555,7 @@ find :: (Contiguous arr, Element arr a)
   => (a -> Bool)
   -> arr a
   -> Maybe a
-find p = fmap coerce (foldMap (\x -> if p x then Just (First x) else Nothing))
+find p = coerce (foldMap (\x -> if p x then Just (First x) else Nothing))
 {-# inline find #-}
 
 -- | Swap the elements of the mutable array at the given indices.
