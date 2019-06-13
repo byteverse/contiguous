@@ -21,6 +21,7 @@ main :: IO ()
 main = do
   putStr "\n"
   unitTests
+  putStr "\n"
 
 unitTests :: IO ()
 unitTests = mapM_ printAndTest
