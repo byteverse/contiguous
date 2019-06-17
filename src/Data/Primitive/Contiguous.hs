@@ -1,6 +1,7 @@
 {-# language BangPatterns #-}
 {-# language FlexibleInstances #-}
 {-# language ForeignFunctionInterface #-}
+{-# language LambdaCase #-}
 {-# language MagicHash #-}
 {-# language RankNTypes #-}
 {-# language ScopedTypeVariables #-}
@@ -58,6 +59,8 @@ module Data.Primitive.Contiguous
     -- ** Permutations
   , reverse
   , reverseMutable
+  , reverseSlice
+
     -- ** Resizing
   , resize
 
@@ -154,7 +157,7 @@ import Data.Kind (Type)
 import Data.Primitive hiding (fromList,fromListN)
 import Data.Primitive.Unlifted.Array
 import Data.Primitive.Unlifted.Class (PrimUnlifted)
-import Data.Semigroup (Semigroup,(<>),First(First))
+import Data.Semigroup (Semigroup,(<>),First(..))
 import Data.Word (Word8)
 import GHC.Base (build)
 import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#,dataToTag#,Int(..))
@@ -1522,15 +1525,25 @@ reverseMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   -> m ()
 reverseMutable marr = do
   !sz <- sizeMutable marr
-  let go !start !end = if start >= end
+  reverseSlice marr 0 (sz - 1)
+{-# inline reverseMutable #-}
+
+-- | Reverse the elements of a slice of a mutable array, in-place.
+reverseSlice :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Mutable arr (PrimState m) a
+  -> Int -- ^ start index
+  -> Int -- ^ end index
+  -> m ()
+reverseSlice !marr !start !end = do
+  let go !s !e = if s >= e
         then pure ()
         else do
-          tmp <- read marr start
-          write marr start =<< read marr end
-          write marr end tmp
-          go (start+1) (end-1)
-  go 0 (sz-1)
-{-# inline reverseMutable #-}
+          tmp <- read marr s
+          write marr s =<< read marr e
+          write marr e tmp
+          go (s+1) (e-1)
+  go start end
+{-# inline reverseSlice #-}
 
 -- | This function does not behave deterministically. Optimization level and
 -- inlining can affect its results. However, the one thing that can be counted
@@ -1555,7 +1568,7 @@ find :: (Contiguous arr, Element arr a)
   => (a -> Bool)
   -> arr a
   -> Maybe a
-find p = coerce (foldMap (\x -> if p x then Just (First x) else Nothing))
+find p = coerce . (foldMap (\x -> if p x then Just (First x) else Nothing))
 {-# inline find #-}
 
 -- | Swap the elements of the mutable array at the given indices.
@@ -1570,3 +1583,39 @@ swap !marr !ix1 !ix2 = do
   write marr ix1 atIx2
   write marr ix2 atIx1
 {-# inline swap #-}
+
+{-
+rotate :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Mutable arr (PrimState m) a
+  -> Int
+  -> m ()
+rotate !marr !d = do
+  !n <- sizeMutable marr
+  let crapReverse !start !end = if start < end
+        then do
+          temp <- read marr start
+          write marr start =<< read marr end
+          write marr end temp
+          crapReverse (start + 1) (end - 1)
+        else pure ()
+  crapReverse 0 (d - 1)
+  crapReverse d (n - 1)
+  crapReverse 0 (n - 1)
+
+rotateTest :: IO ()
+rotateTest = do
+  let sz = 7
+  marr :: MutablePrimArray RealWorld Int <- new sz
+  let go ix = if ix < sz
+        then write marr ix (ix + 1) >> go (ix + 1)
+        else pure ()
+  go 0
+  let go1 ix = if ix < sz
+        then do
+          putStr . (++ " ") . show =<< read marr ix
+          go1 (ix + 1)
+        else putStr "\n"
+  putStrLn "Original array: " >> go1 0 >> putStr "\n"
+  rotate marr 2
+  putStrLn "Rotated array: " >> go1 0 >> putStr "\n"
+-}
