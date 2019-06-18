@@ -77,6 +77,7 @@ module Data.Primitive.Contiguous
   , modify
   , modify'
   , mapMaybe
+
     -- ** Specific elements
   , swap
 
@@ -84,6 +85,10 @@ module Data.Primitive.Contiguous
     -- ** Filtering
   , filter
   , ifilter
+  , catMaybes
+  , lefts
+  , rights
+  , partitionEithers
     -- ** Searching
   , find
     -- ** Comparing for equality
@@ -903,6 +908,14 @@ isTrue :: Word8 -> Bool
 isTrue 0 = False
 isTrue _ = True
 
+-- | The 'catMaybes' function takes a list of 'Maybe's and returns a
+--   list of all the 'Just' values.
+catMaybes :: (Contiguous arr, Element arr a, Element arr (Maybe a))
+  => arr (Maybe a)
+  -> arr a
+catMaybes = mapMaybe id
+{-# inline catMaybes #-}
+
 thawPrimArray :: (PrimMonad m, Prim a) => PrimArray a -> Int -> Int -> m (MutablePrimArray (PrimState m) a)
 thawPrimArray !arr !off !len = do
   marr <- newPrimArray len
@@ -1584,38 +1597,70 @@ swap !marr !ix1 !ix2 = do
   write marr ix2 atIx1
 {-# inline swap #-}
 
-{-
-rotate :: (Contiguous arr, Element arr a, PrimMonad m)
-  => Mutable arr (PrimState m) a
-  -> Int
-  -> m ()
-rotate !marr !d = do
-  !n <- sizeMutable marr
-  let crapReverse !start !end = if start < end
+-- | Extracts from an array of 'Either' all the 'Left' elements.
+-- All the 'Left' elements are extracted in order.
+lefts :: forall arr a b.
+  ( Contiguous arr
+  , Element arr a
+  , Element arr (Either a b)
+  ) => arr (Either a b)
+    -> arr a
+lefts !arr = create $ do
+  let !sz = size arr
+      go :: Int -> [a] -> Int -> ST s (Int, [a])
+      go !ix !as !acc = if ix < sz
         then do
-          temp <- read marr start
-          write marr start =<< read marr end
-          write marr end temp
-          crapReverse (start + 1) (end - 1)
-        else pure ()
-  crapReverse 0 (d - 1)
-  crapReverse d (n - 1)
-  crapReverse 0 (n - 1)
+          indexM arr ix >>= \case
+            Left a -> go (ix + 1) (a:as) (acc + 1)
+            Right _ -> go (ix + 1) as acc
+        else pure (acc, as)
+  (len, as) <- go 0 [] 0
+  unsafeFromListMutableN len as
+{-# inline lefts #-}
 
-rotateTest :: IO ()
-rotateTest = do
-  let sz = 7
-  marr :: MutablePrimArray RealWorld Int <- new sz
-  let go ix = if ix < sz
-        then write marr ix (ix + 1) >> go (ix + 1)
-        else pure ()
-  go 0
-  let go1 ix = if ix < sz
+-- | Extracts from an array of 'Either' all the 'Right' elements.
+-- All the 'Right' elements are extracted in order.
+rights :: forall arr a b.
+  ( Contiguous arr
+  , Element arr b
+  , Element arr (Either a b)
+  ) => arr (Either a b)
+    -> arr b
+rights !arr = create $ do
+  let !sz = size arr
+      go :: Int -> [b] -> Int -> ST s (Int, [b])
+      go !ix !bs !acc = if ix < sz
         then do
-          putStr . (++ " ") . show =<< read marr ix
-          go1 (ix + 1)
-        else putStr "\n"
-  putStrLn "Original array: " >> go1 0 >> putStr "\n"
-  rotate marr 2
-  putStrLn "Rotated array: " >> go1 0 >> putStr "\n"
--}
+          indexM arr ix >>= \case
+            Left _ -> go (ix + 1) bs acc
+            Right b -> go (ix + 1) (b:bs) (acc + 1)
+        else pure (acc, bs)
+  (len, bs) <- go 0 [] 0
+  unsafeFromListMutableN len bs
+{-# inline rights #-}
+
+-- | Partitions an array of 'Either' into two arrays.
+-- All the 'Left' elements are extracted, in order, to the first
+-- component of the output. Similarly the 'Right' elements are extracted
+-- to the second component of the output.
+partitionEithers :: forall arr a b.
+  ( Contiguous arr
+  , Element arr a
+  , Element arr b
+  , Element arr (Either a b)
+  ) => arr (Either a b)
+    -> (arr a, arr b)
+partitionEithers !arr = runST $ do
+  let !sz = size arr
+      go :: Int -> [a] -> [b] -> Int -> Int -> ST s (Int, Int, [a], [b])
+      go !ix !as !bs !accA !accB = if ix < sz
+        then do
+          indexM arr ix >>= \case
+            Left a -> go (ix + 1) (a:as) bs (accA + 1) accB
+            Right b -> go (ix + 1) as (b:bs) accA (accB + 1)
+          else pure (accA, accB, as, bs)
+  (lenA, lenB, as, bs) <- go 0 [] [] 0 0
+  arrA <- unsafeFreeze =<< unsafeFromListMutableN lenA as
+  arrB <- unsafeFreeze =<< unsafeFromListMutableN lenB bs
+  pure (arrA, arrB)
+{-# inline partitionEithers #-}
