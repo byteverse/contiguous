@@ -18,13 +18,13 @@ import qualified Data.List as P
 import qualified Data.Vector as V
 
 main :: IO ()
-main = do
-  putStr "\n"
-  unitTests
-  putStr "\n"
+main = foldMap (\x -> putStr "\n" >> x)
+  [ unitTests1
+  , unitTests2
+  ]
 
-unitTests :: IO ()
-unitTests = mapM_ printAndTest
+unitTests1 :: IO ()
+unitTests1 = mapM_ printAndTest
   [ ("Contiguous.filter = Data.List.filter", prop_filter)
   , ("Contiguous.mapMaybe = Data.Maybe.mapMaybe",prop_mapMaybe)
   , ("Reverse: reverse . reverse = id", prop_reverse1)
@@ -34,6 +34,14 @@ unitTests = mapM_ printAndTest
   , ("Contiguous.unfoldrN = Data.Vector.unfoldrN", \_ -> prop_unfoldrN)
   , ("Contiguous.traverse = Data.Traversable.traverse", prop_traverse)
   , ("Contiguous.find = Data.Foldable.find", prop_find)
+  , ("Contiguous.scanl = Data.List.scanl", prop_scanl)
+  , ("Contiguous.scanl' = Data.List.scanl'", prop_scanl')
+  ]
+
+unitTests2 :: IO ()
+unitTests2 = mapM_ printAndTest
+  [ ("Contiguous.zipWith = Data.List.zipWith", prop_zipWith)
+  , ("Contiguous.zip = Data.List.zip", prop_zip)
   ]
 
 printAndTest :: (Testable prop) => (String, prop) -> IO ()
@@ -126,4 +134,28 @@ prop_find (Arr arr) = property $
   let arrList = C.toList arr
       f = \(L xs) -> even (sum xs)
    in P.find f arrList == C.find f arr
+
+prop_zipWith :: Arr -> Arr -> Property
+prop_zipWith (Arr arr1) (Arr arr2) = property $
+  let arrList1 = C.toList arr1
+      arrList2 = C.toList arr2
+      f = \(L xs) (L ys) -> xs ++ ys
+  in P.zipWith f arrList1 arrList2 == C.toList (C.zipWith f arr1 arr2 :: Array [Int])
+
+prop_zip :: Arr -> Arr -> Property
+prop_zip (Arr arr1) (Arr arr2) = property $
+  let arrList1 = C.toList arr1
+      arrList2 = C.toList arr2
+  in P.zip arrList1 arrList2 == C.toList (C.zip arr1 arr2 :: Array (L, L))
+prop_scanl :: Arr -> Property
+prop_scanl (Arr arr) = property $
+  let arrList = C.toList arr
+      f = \b (L a) -> b ++ a
+  in P.scanl f [] arrList == C.toList (C.scanl f [] arr :: Array [Int])
+
+prop_scanl' :: Arr -> Property
+prop_scanl' (Arr arr) = property $
+  let arrList = C.toList arr
+      f = \b (L a) -> b ++ a
+  in P.scanl' f [] arrList == C.toList (C.scanl' f [] arr :: Array [Int])
 

@@ -78,6 +78,10 @@ module Data.Primitive.Contiguous
   , modify'
   , mapMaybe
 
+    -- ** Zipping
+  , zip
+  , zipWith
+
     -- ** Specific elements
   , swap
 
@@ -116,6 +120,12 @@ module Data.Primitive.Contiguous
   , itraverse_
   , traverseP
 
+    -- * Prefix sums (scans)
+  , scanl
+  , scanl'
+  , iscanl
+  , iscanl'
+
     -- * Conversions
     -- ** Lists
   , fromList
@@ -151,7 +161,7 @@ module Data.Primitive.Contiguous
   , Always
   ) where
 
-import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr)
+import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl)
 import Control.Applicative (liftA2)
 import Control.DeepSeq (NFData)
 import Control.Monad.Primitive
@@ -1134,18 +1144,7 @@ traverse :: (Contiguous arr, Element arr a, Element arr b, Applicative f)
   => (a -> f b)
   -> arr a
   -> f (arr b)
-traverse f = \ !ary ->
-  let
-    !len = size ary
-    go !i
-      | i == len = pure $ STA $ \mary -> unsafeFreeze mary
-      | (# x #) <- index# ary i
-      = liftA2 (\b (STA m) -> STA $ \mary ->
-                  write mary i b >> m mary)
-               (f x) (go (i + 1))
-  in if len == 0
-     then pure empty
-     else runSTA len <$> go 0
+traverse f = itraverse (const f)
 {-# inline traverse #-}
 
 -- | Map each element of the array to an action, evaluate these
@@ -1156,12 +1155,7 @@ traverse_ ::
   => (a -> f b)
   -> arr a
   -> f ()
-traverse_ f a = go 0 where
-  !sz = size a
-  go !ix = if ix < sz
-    then f (index a ix) *> go (ix + 1)
-    else pure ()
-{-# inline traverse_ #-}
+traverse_ f = itraverse_ (const f)
 
 -- | Map each element of the array and its index to an action,
 --   evaluating these actions from left to right.
@@ -1204,7 +1198,7 @@ generate :: (Contiguous arr, Element arr a)
   => Int
   -> (Int -> a)
   -> arr a
-generate len f = runST (generateMutable len f >>= unsafeFreeze)
+generate len f = create (generateMutable len f)
 {-# inline generate #-}
 
 -- | Construct a mutable array of the given length by applying
@@ -1664,3 +1658,151 @@ partitionEithers !arr = runST $ do
   arrB <- unsafeFreeze =<< unsafeFromListMutableN lenB bs
   pure (arrA, arrB)
 {-# inline partitionEithers #-}
+
+{-
+-- | ('<*>') on lifted arrays.
+
+-- TODO: this is not very efficient.
+apply ::
+  ( Contiguous arr
+  , Element arr (a -> b)
+  , Element arr a
+  , Element arr b
+  ) => arr (a -> b) -> arr a -> arr b
+apply f x = fromList (toList f <*> toList x)
+{-# inline apply #-}
+-}
+
+-- | 'scanl' is similar to 'foldl', but returns an array of
+--   successive reduced values from the left:
+--
+--   > scanl f z [x1, x2, ...] = [z, f z x1, f (f z x1) x2, ...]
+--
+--   Note that
+--
+--   > last (toList (scanl f z xs)) == foldl f z xs.
+scanl ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => (b -> a -> b)
+    -> b
+    -> arr1 a
+    -> arr2 b
+scanl f = iscanl (const f)
+{-# inline scanl #-}
+
+-- | A variant of 'scanl' whose function argument takes the current
+--   index as an argument.
+iscanl ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => (Int -> b -> a -> b)
+    -> b
+    -> arr1 a
+    -> arr2 b
+iscanl f q as = create $ do
+  let !sz = size as + 1
+  !marr <- new sz
+  let go !ix acc = if ix < sz
+        then do
+          write marr ix acc
+          x <- indexM as ix
+          go (ix + 1) (f ix acc x)
+        else pure ()
+  go 0 q
+  pure marr
+{-# inline iscanl #-}
+
+-- | A strictly accumulating version of 'scanl'.
+scanl' ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => (b -> a -> b)
+    -> b
+    -> arr1 a
+    -> arr2 b
+scanl' f = iscanl' (const f)
+{-# inline scanl' #-}
+
+-- | A strictly accumulating version of 'iscanl'.
+iscanl' ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => (Int -> b -> a -> b)
+    -> b
+    -> arr1 a
+    -> arr2 b
+iscanl' f !q as = create $ do
+  let !sz = size as + 1
+  !marr <- new sz
+  let go !ix !acc = if ix < sz
+        then do
+          write marr ix acc
+          x <- indexM as ix
+          go (ix + 1) (f ix acc x)
+        else pure ()
+  go 0 q
+  pure marr
+{-# inline iscanl' #-}
+
+-- | 'zipWith' generalises 'zip' by zipping with the function
+--   given as the first argument, instead of a tupling function.
+--   For example, 'zipWith' (+) is applied to two arrays to produce
+--   an array of the corresponding sums.
+zipWith ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Contiguous arr3
+  , Element arr1 a
+  , Element arr2 b
+  , Element arr3 c
+  ) => (a -> b -> c)
+    -> arr1 a
+    -> arr2 b
+    -> arr3 c
+zipWith f as bs = create $ do
+  let !sz = min (size as) (size bs)
+  !marr <- new sz
+  let go !ix = if ix < sz
+        then do
+          a <- indexM as ix
+          b <- indexM bs ix
+          let !g = f a b
+          write marr ix g
+          go (ix + 1)
+        else pure ()
+  go 0
+  pure marr
+{-# inline zipWith #-}
+
+-- | 'zip' takes two arrays and returns an array of
+--   corresponding pairs.
+--
+--   > zip [1, 2] ['a', 'b'] = [(1, 'a'), (2, 'b')]
+--
+--   If one input array is shorter than the other, excess
+--   elements of the longer array are discarded:
+--
+--   > zip [1] ['a', 'b'] = [(1, 'a')]
+--   > zip [1, 2] ['a'] = [(1, 'a')]
+--
+zip ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Contiguous arr3
+  , Element arr1 a
+  , Element arr2 b
+  , Element arr3 (a, b)
+  ) => arr1 a
+    -> arr2 b
+    -> arr3 (a, b)
+zip = zipWith (,)
+{-# inline zip #-}
