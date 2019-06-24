@@ -36,6 +36,7 @@ module Data.Primitive.Contiguous
   , replicate
   , replicateMutable
   , generate
+  , generateM
   , generateMutable
   , iterateN
   , iterateMutableN
@@ -1200,6 +1201,26 @@ generate :: (Contiguous arr, Element arr a)
   -> arr a
 generate len f = create (generateMutable len f)
 {-# inline generate #-}
+
+-- | Construct an array of the given length by applying
+--   the monadic actino to each index.
+generateM :: (Contiguous arr, Element arr a, Monad m)
+  => Int
+  -> (Int -> m a)
+  -> m (arr a)
+generateM !sz f =
+  let go !ix = if ix < sz
+        then liftA2
+          (\b (STA m) -> STA $ \marr -> do
+              write marr ix b
+              m marr
+          )
+          (f ix)
+          (go (ix + 1))
+        else pure $ STA unsafeFreeze
+  in if sz == 0
+    then pure empty
+    else runSTA sz <$> go 0
 
 -- | Construct a mutable array of the given length by applying
 --   the function to each index.

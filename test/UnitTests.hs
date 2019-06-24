@@ -36,6 +36,7 @@ unitTests1 = mapM_ printAndTest
   , ("Contiguous.find = Data.Foldable.find", prop_find)
   , ("Contiguous.scanl = Data.List.scanl", prop_scanl)
   , ("Contiguous.scanl' = Data.List.scanl'", prop_scanl')
+  , ("Contiguous.generateM = Data.Vector.generateM", \_ -> prop_generateM)
   ]
 
 unitTests2 :: IO ()
@@ -122,6 +123,11 @@ prop_traverse (Arr arr) = property $
   let arrList = C.toList arr
       f = \(L xs) -> Identity (sum xs)
    in runIdentity (P.traverse f arrList) == C.toList (runIdentity (C.traverse f arr))
+
+prop_generateM :: Property
+prop_generateM = property $
+  let f = \i -> if even i then Just i else Nothing
+  in fmap V.toList (V.generateM 20 f) == fmap C.toList (C.generateM 20 f :: Maybe (Array Int))
 
 --prop_itraverse :: Arr -> Property
 --prop_itraverse (Arr arr) = property $
