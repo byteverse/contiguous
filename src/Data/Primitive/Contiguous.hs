@@ -126,6 +126,12 @@ module Data.Primitive.Contiguous
   , scanl'
   , iscanl
   , iscanl'
+  , prescanl
+  , prescanl'
+  , iprescanl
+  , iprescanl'
+  --, postscanl
+  --, ipostscanl
 
     -- * Conversions
     -- ** Lists
@@ -1725,17 +1731,7 @@ iscanl ::
     -> b
     -> arr1 a
     -> arr2 b
-iscanl f q as = create $ do
-  let !sz = size as + 1
-  !marr <- new sz
-  let go !ix acc = if ix < sz
-        then do
-          write marr ix acc
-          x <- indexM as ix
-          go (ix + 1) (f ix acc x)
-        else pure ()
-  go 0 q
-  pure marr
+iscanl f q as = internalScanl (size as + 1) 0 0 f q as
 {-# inline iscanl #-}
 
 -- | A strictly accumulating version of 'scanl'.
@@ -1761,8 +1757,50 @@ iscanl' ::
     -> b
     -> arr1 a
     -> arr2 b
-iscanl' f !q as = create $ do
-  let !sz = size as + 1
+iscanl' f !q as = internalScanl' (size as + 1) f q as
+{-# inline iscanl' #-}
+
+-- Internal only. This function helps prevent duplication.
+-- The first argument is the size of the array argument.
+-- The second argument is the index at which to start reading.
+-- The third argument is the index at which to start writing.
+internalScanl ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => Int
+    -> Int
+    -> Int
+    -> (Int -> b -> a -> b)
+    -> b
+    -> arr1 a
+    -> arr2 b
+internalScanl !sz !readIx !writeIx f q as = create $ do
+  !marr <- new sz
+  let go !rix !wix acc = if rix < sz
+        then do
+          write marr wix acc
+          x <- indexM as rix
+          go (rix + 1) (wix + 1) (f rix acc x)
+        else pure ()
+  go readIx writeIx q
+  pure marr
+{-# inline internalScanl #-}
+
+-- Internal only. The first argument is the size of the array
+-- argument. This function helps prevent duplication.
+internalScanl' ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => Int
+    -> (Int -> b -> a -> b)
+    -> b
+    -> arr1 a
+    -> arr2 b
+internalScanl' !sz f !q as = create $ do
   !marr <- new sz
   let go !ix !acc = if ix < sz
         then do
@@ -1772,7 +1810,97 @@ iscanl' f !q as = create $ do
         else pure ()
   go 0 q
   pure marr
-{-# inline iscanl' #-}
+{-# inline internalScanl' #-}
+
+-- | A prescan.
+--
+--   @
+--   prescanl f z = init . scanl f z
+--   @
+--
+--   Example: @prescanl (+) 0 \<1,2,3,4\> = \<0,1,3,6\>@
+prescanl ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => (b -> a -> b)
+    -> b
+    -> arr1 a
+    -> arr2 b
+prescanl f = iprescanl (const f)
+{-# inline prescanl #-}
+
+-- | A variant of 'prescanl' where the function argument takes
+--   the current index of the array as an additional argument.
+iprescanl ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => (Int -> b -> a -> b)
+    -> b
+    -> arr1 a
+    -> arr2 b
+iprescanl f q as = internalScanl (size as) 0 0 f q as
+
+-- | Like 'prescanl', but with a strict accumulator.
+prescanl' ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => (b -> a -> b)
+    -> b
+    -> arr1 a
+    -> arr2 b
+prescanl' f = iprescanl (const f)
+{-# inline prescanl' #-}
+
+-- | Like 'iprescanl', but with a strict accumulator.
+iprescanl' ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => (Int -> b -> a -> b)
+    -> b
+    -> arr1 a
+    -> arr2 b
+iprescanl' f !q as = internalScanl' (size as) f q as
+{-# inline iprescanl' #-}
+
+{-
+ipostscanl ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => (Int -> b -> a -> b)
+    -> b
+    -> arr1 a
+    -> arr2 b
+ipostscanl f q as =
+  let go !n = if n == 0
+        then empty
+        else
+          let !ix = 0
+              !(# x #) = index# as ix
+              q' = f ix q x
+           in internalScanl n 1 0 f q' as
+  in go (size as)
+
+postscanl ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => (b -> a -> b)
+    -> b
+    -> arr1 a
+    -> arr2 b
+postscanl f = ipostscanl (const f)
+-}
 
 -- | 'zipWith' generalises 'zip' by zipping with the function
 --   given as the first argument, instead of a tupling function.
