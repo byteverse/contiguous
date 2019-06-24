@@ -14,6 +14,7 @@ import qualified Data.Maybe as P
 import qualified Data.Primitive.Contiguous as C
 import qualified GHC.Exts as Exts
 import qualified Prelude as P
+import qualified Data.Either as P
 import qualified Data.List as P
 import qualified Data.Vector as V
 
@@ -21,6 +22,7 @@ main :: IO ()
 main = foldMap (\x -> putStr "\n" >> x)
   [ unitTests1
   , unitTests2
+  , unitTests3
   ]
 
 unitTests1 :: IO ()
@@ -36,6 +38,7 @@ unitTests1 = mapM_ printAndTest
   , ("Contiguous.find = Data.Foldable.find", prop_find)
   , ("Contiguous.scanl = Data.List.scanl", prop_scanl)
   , ("Contiguous.scanl' = Data.List.scanl'", prop_scanl')
+  , ("Contiguous.generate = Data.Vector.generate", \_ -> prop_generate)
   , ("Contiguous.generateM = Data.Vector.generateM", \_ -> prop_generateM)
   ]
 
@@ -45,6 +48,13 @@ unitTests2 = mapM_ printAndTest
   , ("Contiguous.zip = Data.List.zip", prop_zip)
   ]
 
+unitTests3 :: IO ()
+unitTests3 = mapM_ printAndTest
+  [ ("Contiguous.lefts = Data.Either.lefts", prop_lefts)
+  , ("Contiguous.rights = Data.Either.rights", prop_rights)
+  , ("Contiguous.partitionEithers = Data.Either.partitionEithers", prop_partitionEithers)
+  ]
+
 printAndTest :: (Testable prop) => (String, prop) -> IO ()
 printAndTest (x,y) = do
   putStrLn $ P.replicate (length x + 6) '-'
@@ -52,6 +62,7 @@ printAndTest (x,y) = do
   putStrLn $ P.replicate (length x + 6) '-'
   putStr "\n"
   quickCheck y
+  -- verboseCheck y
   putStr "\n"
 
 newtype Arr = Arr (Array L)
@@ -124,6 +135,11 @@ prop_traverse (Arr arr) = property $
       f = \(L xs) -> Identity (sum xs)
    in runIdentity (P.traverse f arrList) == C.toList (runIdentity (C.traverse f arr))
 
+prop_generate :: Property
+prop_generate = property $
+  let f = \i -> if even i then Just i else Nothing
+  in V.toList (V.generate 20 f) == C.toList (C.generate 20 f :: Array (Maybe Int))
+
 prop_generateM :: Property
 prop_generateM = property $
   let f = \i -> if even i then Just i else Nothing
@@ -164,4 +180,29 @@ prop_scanl' (Arr arr) = property $
   let arrList = C.toList arr
       f = \b (L a) -> b ++ a
   in P.scanl' f [] arrList == C.toList (C.scanl' f [] arr :: Array [Int])
+
+prop_partitionEithers :: Array' (Either Int Bool) -> Property
+prop_partitionEithers (Array' arr) = property $
+  let arrList = C.toList arr
+      rhs = case C.partitionEithers arr of (as,bs) -> (C.toList as, C.toList bs)
+  in P.partitionEithers arrList == rhs
+
+prop_rights :: Array' (Either Int Bool) -> Property
+prop_rights (Array' arr) = property $
+  let arrList = C.toList arr
+  in P.rights arrList == C.toList (C.rights arr)
+
+prop_lefts :: Array' (Either Int Bool) -> Property
+prop_lefts (Array' arr) = property $
+  let arrList = C.toList arr
+  in P.lefts arrList == C.toList (C.lefts arr)
+
+newtype Array' a = Array' { getArray' :: Array a }
+  deriving (Eq, Show, Exts.IsList)
+
+instance Arbitrary a => Arbitrary (Array' a) where
+  arbitrary = do
+    k <- choose (2,20)
+    fmap Exts.fromList $ vectorOf k arbitrary
+  shrink xs = fmap Exts.fromList $ shrink $ Exts.toList xs
 

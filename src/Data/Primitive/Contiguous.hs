@@ -1630,7 +1630,7 @@ lefts !arr = create $ do
             Right _ -> go (ix + 1) as acc
         else pure (acc, as)
   (len, as) <- go 0 [] 0
-  unsafeFromListMutableN len as
+  unsafeFromListReverseMutableN len as
 {-# inline lefts #-}
 
 -- | Extracts from an array of 'Either' all the 'Right' elements.
@@ -1651,7 +1651,7 @@ rights !arr = create $ do
             Right b -> go (ix + 1) (b:bs) (acc + 1)
         else pure (acc, bs)
   (len, bs) <- go 0 [] 0
-  unsafeFromListMutableN len bs
+  unsafeFromListReverseMutableN len bs
 {-# inline rights #-}
 
 -- | Partitions an array of 'Either' into two arrays.
@@ -1675,8 +1675,8 @@ partitionEithers !arr = runST $ do
             Right b -> go (ix + 1) as (b:bs) accA (accB + 1)
           else pure (accA, accB, as, bs)
   (lenA, lenB, as, bs) <- go 0 [] [] 0 0
-  arrA <- unsafeFreeze =<< unsafeFromListMutableN lenA as
-  arrB <- unsafeFreeze =<< unsafeFromListMutableN lenB bs
+  arrA <- unsafeFreeze =<< unsafeFromListReverseMutableN lenA as
+  arrB <- unsafeFreeze =<< unsafeFromListReverseMutableN lenB bs
   pure (arrA, arrB)
 {-# inline partitionEithers #-}
 
