@@ -1,13 +1,14 @@
-{-# language BangPatterns #-}
-{-# language FlexibleInstances #-}
-{-# language ForeignFunctionInterface #-}
-{-# language LambdaCase #-}
-{-# language MagicHash #-}
-{-# language RankNTypes #-}
-{-# language ScopedTypeVariables #-}
-{-# language TypeFamilies #-}
-{-# language TypeFamilyDependencies #-}
-{-# language UnboxedTuples #-}
+{-# language
+        BangPatterns
+      , FlexibleInstances
+      , LambdaCase
+      , MagicHash
+      , RankNTypes
+      , ScopedTypeVariables
+      , TypeFamilies
+      , TypeFamilyDependencies
+      , UnboxedTuples
+  #-}
 
 -- | The contiguous typeclass parameterises over a contiguous array type.
 --   This allows us to have a common API to a number of contiguous
@@ -121,6 +122,10 @@ module Data.Primitive.Contiguous
   , itraverse_
   , traverseP
 
+    -- * Typeclass method defaults
+  , (<$)
+  , ap
+
     -- * Prefix sums (scans)
   , scanl
   , scanl'
@@ -166,11 +171,22 @@ module Data.Primitive.Contiguous
     -- * Classes
   , Contiguous(Mutable,Element)
   , Always
+
+    -- * Re-Exports
+  , Array
+  , MutableArray
+  , SmallArray
+  , SmallMutableArray
+  , PrimArray
+  , MutablePrimArray
+  , UnliftedArray
+  , MutableUnliftedArray
   ) where
 
-import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl)
+import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$))
 import Control.Applicative (liftA2)
 import Control.DeepSeq (NFData)
+import Control.Monad (when)
 import Control.Monad.Primitive
 import Control.Monad.ST (runST,ST)
 import Data.Bits (xor)
@@ -881,16 +897,14 @@ ifilter p arr = runST $ do
     then pure arr
     else do
       marrTrues <- new numTrue
-      let go2 !ixSrc !ixDst = if ixDst < numTrue
-            then do
-              atIxKeep <- readPrimArray marr ixSrc
-              if isTrue atIxKeep
-                then do
-                  atIxVal <- indexM arr ixSrc
-                  write marrTrues ixDst atIxVal
-                  go2 (ixSrc + 1) (ixDst + 1)
-                else go2 (ixSrc + 1) ixDst
-            else pure ()
+      let go2 !ixSrc !ixDst = when (ixDst < numTrue) $ do
+            atIxKeep <- readPrimArray marr ixSrc
+            if isTrue atIxKeep
+              then do
+                atIxVal <- indexM arr ixSrc
+                write marrTrues ixDst atIxVal
+                go2 (ixSrc + 1) (ixDst + 1)
+              else go2 (ixSrc + 1) ixDst
       go2 0 0
       unsafeFreeze marrTrues
   where
@@ -966,12 +980,10 @@ replicateMutableM :: (PrimMonad m, Contiguous arr, Element arr a)
   -> m (Mutable arr (PrimState m) a)
 replicateMutableM len act = do
   marr <- new len
-  let go !ix = if ix < len
-        then do
-          x <- act
-          write marr ix x
-          go (ix + 1)
-        else pure ()
+  let go !ix = when (ix < len) $ do
+        x <- act
+        write marr ix x
+        go (ix + 1)
   go 0
   pure marr
 {-# inline replicateMutableM #-}
@@ -992,9 +1004,9 @@ replicateSmallMutableArray :: (PrimMonad m)
   -> m (SmallMutableArray (PrimState m) a)
 replicateSmallMutableArray len a = do
   marr <- newSmallArray len errorThunk
-  let go !ix = if ix < len
-        then writeSmallArray marr ix a >> go (ix + 1)
-        else pure ()
+  let go !ix = when (ix < len) $ do
+        writeSmallArray marr ix a
+        go (ix + 1)
   go 0
   pure marr
 {-# inline replicateSmallMutableArray #-}
@@ -1055,12 +1067,10 @@ mapMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   -> m ()
 mapMutable f = \ !mary -> do
   !sz <- sizeMutable mary
-  let go !ix = if ix < sz
-        then do
-          a <- read mary ix
-          write mary ix (f a)
-          go (ix + 1)
-        else pure ()
+  let go !ix = when (ix < sz) $ do
+        a <- read mary ix
+        write mary ix (f a)
+        go (ix + 1)
   go 0
 {-# inline mapMutable #-}
 
@@ -1089,12 +1099,10 @@ imapMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   -> m ()
 imapMutable f = \ !mary -> do
   !sz <- sizeMutable mary
-  let go !ix = if ix < sz
-        then do
-          a <- read mary ix
-          write mary ix (f ix a)
-          go (ix + 1)
-        else pure ()
+  let go !ix = when (ix < sz) $ do
+        a <- read mary ix
+        write mary ix (f ix a)
+        go (ix + 1)
   go 0
 {-# inline imapMutable #-}
 
@@ -1194,9 +1202,8 @@ itraverse_ ::
   -> f ()
 itraverse_ f a = go 0 where
   !sz = size a
-  go !ix = if ix < sz
-    then f ix (index a ix) *> go (ix + 1)
-    else pure ()
+  go !ix = when (ix < sz) $
+    f ix (index a ix) *> go (ix + 1)
 {-# inline itraverse_ #-}
 
 -- | Construct an array of the given length by applying
@@ -1245,12 +1252,10 @@ generateMutableM :: (Contiguous arr, Element arr a, PrimMonad m)
   -> m (Mutable arr (PrimState m) a)
 generateMutableM !len f = do
   marr <- new len
-  let go !ix = if ix < len
-        then do
-          x <- f ix
-          write marr ix x
-          go (ix + 1)
-        else pure ()
+  let go !ix = when (ix < len) $ do
+        x <- f ix
+        write marr ix x
+        go (ix + 1)
   go 0
   pure marr
 {-# inline generateMutableM #-}
@@ -1473,12 +1478,10 @@ modify :: (Contiguous arr, Element arr a, PrimMonad m)
   -> m ()
 modify f marr = do
   !sz <- sizeMutable marr
-  let go !ix = if ix < sz
-        then do
-          x <- read marr ix
-          write marr ix (f x)
-          go (ix + 1)
-        else pure ()
+  let go !ix = when (ix < sz) $ do
+        x <- read marr ix
+        write marr ix (f x)
+        go (ix + 1)
   go 0
 {-# inline modify #-}
 
@@ -1489,13 +1492,11 @@ modify' :: (Contiguous arr, Element arr a, PrimMonad m)
   -> m ()
 modify' f marr = do
   !sz <- sizeMutable marr
-  let go !ix = if ix < sz
-        then do
-          x <- read marr ix
-          let !y = f x
-          write marr ix y
-          go (ix + 1)
-        else pure ()
+  let go !ix = when (ix < sz) $ do
+        x <- read marr ix
+        let !y = f x
+        write marr ix y
+        go (ix + 1)
   go 0
 {-# inline modify' #-}
 
@@ -1920,14 +1921,12 @@ zipWith ::
 zipWith f as bs = create $ do
   let !sz = min (size as) (size bs)
   !marr <- new sz
-  let go !ix = if ix < sz
-        then do
-          a <- indexM as ix
-          b <- indexM bs ix
-          let !g = f a b
-          write marr ix g
-          go (ix + 1)
-        else pure ()
+  let go !ix = when (ix < sz) $ do
+        a <- indexM as ix
+        b <- indexM bs ix
+        let !g = f a b
+        write marr ix g
+        go (ix + 1)
   go 0
   pure marr
 {-# inline zipWith #-}
@@ -1955,3 +1954,39 @@ zip ::
     -> arr3 (a, b)
 zip = zipWith (,)
 {-# inline zip #-}
+
+(<$) ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 b
+  , Element arr2 a
+  ) => a -> arr1 b -> arr2 a
+a <$ barr = create (replicateMutable (size barr) a)
+{-# inline (<$) #-}
+
+ap ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Contiguous arr3
+  , Element arr1 (a -> b)
+  , Element arr2 a
+  , Element arr3 b
+  ) => arr1 (a -> b) -> arr2 a -> arr3 b
+ap fs xs = create $ do
+  marr <- new (szfs * szxs)
+  let go1 !ix = when (ix < szfs) $ do
+        f <- indexM fs ix
+        go2 (ix * szxs) f 0
+        go1 (ix + 1)
+      go2 !off f !j = when (j < szxs) $ do
+        x <- indexM xs j
+        write marr (off + j) (f x)
+        go2 off f (j + 1)
+  go1 0
+  pure marr
+  where
+    !szfs = size fs
+    !szxs = size xs
+{-# inline ap #-}
+
+

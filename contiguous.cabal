@@ -46,3 +46,18 @@ test-suite unit-tests
     , quickcheck-instances
   default-language: Haskell2010
   ghc-options: -O2 -Wall
+
+test-suite laws
+  type: exitcode-stdio-1.0
+  main-is: Laws.hs
+  hs-source-dirs: test
+  build-depends:
+      base
+    , contiguous
+    , primitive
+    , vector
+    , QuickCheck
+    , quickcheck-instances
+    , quickcheck-classes
+  default-language: Haskell2010
+  ghc-options: -O2 -Wall
