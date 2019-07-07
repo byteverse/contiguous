@@ -872,7 +872,7 @@ filter :: (Contiguous arr, Element arr a)
   => (a -> Bool)
   -> arr a
   -> arr a
-filter p arr = ifilter (\_ a -> p a) arr
+filter p arr = ifilter (const p) arr
 {-# inline filter #-}
 
 -- | Drop elements that do not satisfy the predicate which
