@@ -3,6 +3,7 @@
       , FlexibleInstances
       , LambdaCase
       , MagicHash
+      , NamedFieldPuns
       , RankNTypes
       , ScopedTypeVariables
       , TypeFamilies
@@ -125,6 +126,7 @@ module Data.Primitive.Contiguous
     -- * Typeclass method defaults
   , (<$)
   , ap
+  , bind
 
     -- * Prefix sums (scans)
   , scanl
@@ -1989,4 +1991,117 @@ ap fs xs = create $ do
     !szxs = size xs
 {-# inline ap #-}
 
+data ArrayStack arr a
+  = PushArray !(arr a) !(ArrayStack arr a)
+  | EmptyStack
+
+--foldArrayStack :: (Contiguous arr, Element arr a)
+--  => ArrayStack arr a
+--  -> arr a
+
+-- Copy incoming arrays into the mutable buffer
+-- until we would overflow it. Then we'd freeze it,
+-- push it onto the stack, and continue. Any sufficiently
+-- large incoming arrays go straight onto the stack.
+data Nes arr s a = Nes
+  { buffer :: !(Mutable arr s a) -- our mutable buffer
+  , bufferPtr :: !Int -- our pointer into the buffer (0-indexed)
+  , stack :: !(ArrayStack arr a) -- the stack
+
+  -- Is this a worthwhile optimisation?
+  -- I think so. If the arrays we have are very large,
+  -- maybe buffering them won't make a difference.
+  --
+  -- Then again, if this is just the size of our buffer,
+  -- then this is redundant. So for this to be useful it must
+  -- be larger than the size of our buffer.
+  --, maxSize :: !Int            -- any arrays larger than this
+                                 -- will go onto the stack, without
+                                 -- question.
+  }
+
+pushNes :: (Contiguous arr, Element arr a, PrimMonad m)
+  => arr a
+  -> Nes arr (PrimState m) a
+  -> m (Nes arr (PrimState m) a)
+pushNes arr Nes{buffer,stack,bufferPtr} = do
+  let szIncoming = size arr
+  szBuffer <- sizeMutable buffer
+  if szIncoming < (szBuffer - bufferPtr)
+    then do
+      -- copy the array into the buffer
+      copy buffer bufferPtr arr 0 szIncoming
+      -- increment the pointer by the length of the array
+      pure (Nes buffer (bufferPtr + szIncoming) stack)
+    else do
+      -- freeze the buffer
+      frozen <- freeze buffer 0 (bufferPtr + 1)
+      -- place it on the stack. "refresh" the buffer (start at 0 again)
+      pure (Nes buffer 0 (PushArray frozen stack))
+{-# inline pushNes #-}
+
+fill :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Int -- length of final array
+  -> ArrayStack arr a -- array stack
+  -> m (Mutable arr (PrimState m) a) -- result of pop+copy, pop+copy, pop+copy, ..., stop
+fill !totalSize stk = do
+  marr <- new totalSize
+  let go !_ EmptyStack = pure ()
+      go !off (PushArray arr arrs) = do
+        let !sz = size arr
+        copy marr off arr 0 sz
+        go (off + sz) arrs
+  go 0 stk
+  pure marr
+{-# inline fill #-}
+
+-- pull out the arraystack, first appending what's left in the buffer,
+-- then appending the final incoming array.
+pull :: (Contiguous arr, Element arr a, PrimMonad m)
+  => arr a
+  -> Nes arr (PrimState m) a
+  -> m (ArrayStack arr a)
+pull incoming Nes{buffer,bufferPtr,stack} = do
+  -- allocate an array for the remaining
+  -- (this should use shrinking instead)
+  remainingMutable <- new (bufferPtr + 1)
+  copyMutable remainingMutable 0 buffer 0 (bufferPtr + 1)
+  remaining <- unsafeFreeze remainingMutable
+  pure (PushArray incoming (PushArray remaining stack))
+{-# inline pull #-}
+
+newNes :: (Contiguous arr, Element arr a, PrimMonad m)
+  => Int -> m (Nes arr (PrimState m) a)
+newNes !sz = do
+  mutableBuffer <- new sz
+  pure (Nes mutableBuffer 0 EmptyStack)
+{-# inline newNes #-}
+
+bind :: forall arr1 arr2 a b.
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => arr1 a -> (a -> arr2 b) -> arr2 b
+bind arr f = create $ do
+  let go :: Int -> Int -> Nes arr2 s b -> ST s (Mutable arr2 s b)
+      go !totalSize !ix !nes
+        | ix == size arr - 1 = do
+            x <- indexM arr ix
+            let arrB = f x
+            stk <- pull arrB nes
+            fill totalSize stk
+        | otherwise = do
+            x <- indexM arr ix
+            let arrB = f x
+                !szB = size arrB
+            if szB == 0 -- refrain from pushing empty arrays
+              then go totalSize (ix + 1) nes
+              else do
+                nes' <- pushNes arrB nes
+                go (totalSize + szB) (ix + 1) nes'
+  go 0 0 =<< newNes 128
+  -- our default buffer is 128 elements in length.
+  -- this number should be tweaked based on benchmarks.
+{-# inline bind #-}
 

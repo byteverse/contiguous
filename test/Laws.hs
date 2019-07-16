@@ -14,10 +14,10 @@ main = lawsCheckMany laws
 
 laws :: [(String, [Laws])]
 laws =
-  [ ("Arr", [functorLaws arr, applicativeLaws arr])
+  [ ("Arr", [functorLaws arr, applicativeLaws arr,monadLaws arr])
   ]
 
-newtype Arr a = Arr (Array a)
+newtype Arr a = Arr { getArr :: Array a }
   deriving (Eq, Show)
 
 instance Arbitrary a => Arbitrary (Arr a) where
@@ -33,3 +33,6 @@ instance Functor Arr where
 instance Applicative Arr where
   pure = Arr . C.singleton
   Arr f <*> Arr x = Arr (C.ap f x)
+
+instance Monad Arr where
+  Arr x >>= k = Arr (C.bind x (getArr . k))
