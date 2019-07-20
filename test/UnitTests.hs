@@ -140,7 +140,7 @@ prop_traverse :: Arr -> Property
 prop_traverse (Arr arr) = property $
   let arrList = C.toList arr
       f = \(L xs) -> Identity (sum xs)
-   in runIdentity (P.traverse f arrList) == C.toList (runIdentity (C.traverse f arr))
+   in runIdentity (P.traverse f arrList) == C.toList (runIdentity (C.traverse f arr :: Identity (Array Int)))
 
 prop_generate :: Property
 prop_generate = property $
