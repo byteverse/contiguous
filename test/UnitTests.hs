@@ -1,3 +1,4 @@
+{-# language ExistentialQuantification #-}
 {-# language GeneralizedNewtypeDeriving #-}
 {-# language ScopedTypeVariables #-}
 {-# language UndecidableInstances #-}
@@ -19,64 +20,72 @@ import qualified Data.List as P
 import qualified Data.Vector as V
 
 main :: IO ()
-main = foldMap (\x -> putStr "\n" >> x)
-  [ unitTests1
-  , unitTests2
-  , unitTests3
+main = unitTests
+
+unitTests :: IO ()
+unitTests = mapM_ testC
+  [ quiet "Contiguous.filter = Data.List.filter" prop_filter
+  , quiet "Contiguous.mapMaybe = Data.Maybe.mapMaybe" prop_mapMaybe
+  , quiet "Reverse: reverse . reverse = id" prop_reverse1
+  , quiet "Contiguous.reverse = Data.List.reverse" prop_reverse2
+  , quiet "Contiguous.map = Data.List.map" prop_map
+  , quiet "Contiguous.unfoldr = Data.List.unfoldr" prop_unfoldr
+  , quiet "Contiguous.unfoldrN = Data.Vector.unfoldrN" prop_unfoldrN
+  , quiet "Contiguous.traverse = Data.Traversable.traverse" prop_traverse
+  , quiet "Contiguous.find = Data.Foldable.find" prop_find
+  , quiet "Contiguous.scanl = Data.List.scanl" prop_scanl
+  , quiet "Contiguous.scanl' = Data.List.scanl'" prop_scanl'
+  , quiet "Contiguous.prescanl = Data.Vector.prescanl" prop_prescanl
+  , quiet "Contiguous.prescanl' = Data.Vector.prescanl'" prop_prescanl'
+  , quiet "Contiguous.generate = Data.Vector.generate" prop_generate
+  , quiet "Contiguous.generateM = Data.Vector.generateM" prop_generateM
+  , quiet "Contiguous.minimum = Data.Foldable.minimum" prop_minimum
+  , quiet "Contiguous.maximum = Data.Foldable.maximum" prop_maximum
+  , quiet "Contiguous.zipWith = Data.List.zipWith" prop_zipWith
+  , quiet "Contiguous.zip = Data.List.zip" prop_zip
+  , quiet "Contiguous.lefts = Data.Either.lefts" prop_lefts
+  , quiet "Contiguous.rights = Data.Either.rights" prop_rights
+  , quiet "Contiguous.partitionEithers = Data.Either.partitionEithers" prop_partitionEithers
   ]
 
-unitTests1 :: IO ()
-unitTests1 = mapM_ printAndTest
-  [ (Quiet, "Contiguous.filter = Data.List.filter", prop_filter)
-  , (Quiet, "Contiguous.mapMaybe = Data.Maybe.mapMaybe",prop_mapMaybe)
-  , (Quiet, "Reverse: reverse . reverse = id", prop_reverse1)
-  , (Quiet, "Contiguous.reverse = Data.List.reverse", prop_reverse2)
-  , (Quiet, "Contiguous.map = Data.List.map", prop_map)
-  , (Quiet, "Contiguous.unfoldr = Data.List.unfoldr", \_ -> prop_unfoldr)
-  , (Quiet, "Contiguous.unfoldrN = Data.Vector.unfoldrN", \_ -> prop_unfoldrN)
-  , (Quiet, "Contiguous.traverse = Data.Traversable.traverse", prop_traverse)
-  , (Quiet, "Contiguous.find = Data.Foldable.find", prop_find)
-  , (Quiet, "Contiguous.scanl = Data.List.scanl", prop_scanl)
-  , (Quiet, "Contiguous.scanl' = Data.List.scanl'", prop_scanl')
-  , (Quiet, "Contiguous.prescanl = Data.Vector.prescanl", prop_prescanl)
-  , (Quiet, "Contiguous.prescanl' = Data.Vector.prescanl'", prop_prescanl')
---  , (Verbose, "Contiguous.postscanl = Data.Vector.postscanl", prop_postscanl)
-  , (Quiet, "Contiguous.generate = Data.Vector.generate", \_ -> prop_generate)
-  , (Quiet, "Contiguous.generateM = Data.Vector.generateM", \_ -> prop_generateM)
-  ]
-
-unitTests2 :: IO ()
-unitTests2 = mapM_ printAndTest
-  [ (Quiet, "Contiguous.zipWith = Data.List.zipWith", prop_zipWith)
-  , (Quiet, "Contiguous.zip = Data.List.zip", prop_zip)
-  ]
-
-unitTests3 :: IO ()
-unitTests3 = mapM_ printAndTest
-  [ (Quiet, "Contiguous.lefts = Data.Either.lefts", prop_lefts)
-  , (Quiet, "Contiguous.rights = Data.Either.rights", prop_rights)
-  , (Quiet, "Contiguous.partitionEithers = Data.Either.partitionEithers", prop_partitionEithers)
-  ]
-
+-- Verbosity with which to run tests.
 data Verbosity = Quiet | Verbose
 
-printAndTest :: (Testable prop) => (Verbosity,String, prop) -> IO ()
-printAndTest (v,x,y) = do
-  putStrLn $ P.replicate (length x + 6) '-'
-  putStrLn $ "-- " ++ x ++ " --"
-  putStrLn $ P.replicate (length x + 6) '-'
+-- | Hide the prop type.
+data Prop = forall prop. Testable prop => Prop prop
+
+
+-- hack to let us get away with stuffing different
+-- prop types in a list
+data CTest = CTest
+  { _verbosity :: Verbosity
+  , _label :: String
+  , _prop :: Prop
+  }
+
+-- quiet output of a test
+quiet :: Testable prop => String -> prop -> CTest
+quiet l p = CTest Quiet l (Prop p)
+
+-- verbose output of a test
+-- Useful for failing tests
+_verbose :: Testable prop => String -> prop -> CTest
+_verbose l p = CTest Verbose l (Prop p)
+
+testC :: CTest -> IO ()
+testC (CTest v lbl (Prop p)) = do
+  putStrLn $ P.replicate (length lbl + 6) '-'
+  putStrLn $ "-- " ++ lbl ++ " --"
+  putStrLn $ P.replicate (length lbl + 6) '-'
   putStr "\n"
-  case v of
-    Verbose -> verboseCheck y
-    Quiet -> quickCheck y
-  -- verboseCheck y
+  ($ p) $ case v of { Verbose -> verboseCheck; Quiet -> quickCheck }
   putStr "\n"
 
 newtype Arr = Arr (Array L)
   deriving (Eq,Show)
 
 newtype L = L [Int]
-  deriving (Eq,Exts.IsList)
+  deriving (Eq,Ord,Exts.IsList)
 
 instance Show L where
   show (L x) = show x
@@ -217,6 +226,16 @@ prop_lefts :: Array' (Either Int Bool) -> Property
 prop_lefts (Array' arr) = property $
   let arrList = C.toList arr
   in P.lefts arrList == C.toList (C.lefts arr)
+
+prop_minimum :: Arr -> Property
+prop_minimum (Arr arr) = property $
+  let arrList = C.toList arr
+  in Just (minimum arrList) == C.minimum arr
+
+prop_maximum :: Arr -> Property
+prop_maximum (Arr arr) = property $
+  let arrList = C.toList arr
+  in Just (maximum arrList) == C.maximum arr
 
 newtype Array' a = Array' { getArray' :: Array a }
   deriving (Eq, Show, Exts.IsList)
