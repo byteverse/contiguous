@@ -1334,12 +1334,17 @@ sequence_ ::
 sequence_ = foldr (*>) (pure ())
 {-# inline sequence_ #-}
 
+-- | The sum of a collection of actions, generalizing 'concat'.
+--
+--   >>> asum (C.fromList ['Just' "Hello", 'Nothing', Just "World"] :: Array String)
+--   Just "Hello"
 asum ::
   ( Contiguous arr
   , Element arr (f a)
   , A.Alternative f
   ) => arr (f a) -> f a
 asum = foldr (A.<|>) A.empty
+{-# inline asum #-}
 
 -- | Construct an array of the given length by applying
 --   the function to each index.
@@ -1979,9 +1984,7 @@ internalScanl' !sz f !q as = create $ do
 
 -- | A prescan.
 --
---   @
---   prescanl f z = init . scanl f z
---   @
+--   @prescanl f z = init . scanl f z@
 --
 --   Example: @prescanl (+) 0 \<1,2,3,4\> = \<0,1,3,6\>@
 prescanl ::
@@ -2088,6 +2091,9 @@ zip ::
 zip = zipWith (,)
 {-# inline zip #-}
 
+-- | Replace all locations in the input with the same value.
+--
+--   Equivalent to Data.Functor.'Data.Functor.<$'.
 (<$) ::
   ( Contiguous arr1
   , Contiguous arr2
@@ -2097,6 +2103,9 @@ zip = zipWith (,)
 a <$ barr = create (replicateMutable (size barr) a)
 {-# inline (<$) #-}
 
+-- | Sequential application.
+--
+--   Equivalent to Control.Applicative.'Control.Applicative.<*>'.
 ap ::
   ( Contiguous arr1
   , Contiguous arr2
