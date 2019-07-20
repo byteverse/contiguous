@@ -1751,27 +1751,47 @@ elem a !arr =
 
 -- | The largest element of a structure.
 maximum :: (Contiguous arr, Element arr a, Ord a) => arr a -> Maybe a
-maximum arr =
-  let !sz = size arr
-      go !ix o
-        | ix < sz = case index# arr ix of
-            !(# x #) -> go (ix + 1) (if x > o then x else o)
-        | otherwise = o
-  in if sz == 0
-    then Nothing
-    else Just (go 0 (index arr 0))
+maximum = maximumBy compare
+{-# inline maximum #-}
 
 -- | The least element of a structure.
 minimum :: (Contiguous arr, Element arr a, Ord a) => arr a -> Maybe a
-minimum arr =
+minimum = minimumBy compare
+{-# inline minimum #-}
+
+-- | The largest element of a structure with respect to the
+--   given comparison function.
+maximumBy :: (Contiguous arr, Element arr a)
+  => (a -> a -> Ordering)
+  -> arr a
+  -> Maybe a
+maximumBy f arr =
   let !sz = size arr
-      go !ix o
-        | ix < sz = case index# arr ix of
-            !(# x #) -> go (ix + 1) (if x < o then x else o)
-        | otherwise = o
+      go !ix o = if ix < sz
+        then case index# arr ix of
+          !(# x #) -> go (ix + 1) (case f x o of { GT -> x; _ -> o; })
+        else o
   in if sz == 0
     then Nothing
     else Just (go 0 (index arr 0))
+{-# inline maximumBy #-}
+
+-- | The least element of a structure with respect to the
+--   given comparison function.
+minimumBy :: (Contiguous arr, Element arr a)
+  => (a -> a -> Ordering)
+  -> arr a
+  -> Maybe a
+minimumBy f arr =
+  let !sz = size arr
+      go !ix o = if ix < sz
+        then case index# arr ix of
+          !(# x #) -> go (ix + 1) (case f x o of { GT -> o; _ -> x; })
+        else o
+  in if sz == 0
+    then Nothing
+    else Just (go 0 (index arr 0))
+{-# inline minimumBy #-}
 
 -- | 'find' takes a predicate and an array, and returns the leftmost
 --   element of the array matching the prediate, or 'Nothing' if there
