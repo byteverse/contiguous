@@ -117,6 +117,7 @@ module Data.Primitive.Contiguous
   , ifoldlMap'
   , ifoldlMap1'
   , foldlM'
+  , asum
 
     -- * Traversals
   , traverse
@@ -125,9 +126,13 @@ module Data.Primitive.Contiguous
   , itraverse_
   , traverseP
   , mapM
+  , forM
   , mapM_
+  , forM_
   , for
   , for_
+  , sequence
+  , sequence_
 
     -- * Typeclass method defaults
   , (<$)
@@ -190,7 +195,7 @@ module Data.Primitive.Contiguous
   , MutableUnliftedArray
   ) where
 
-import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$),elem,maximum,minimum,mapM,mapM_)
+import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$),elem,maximum,minimum,mapM,mapM_,sequence,sequence_)
 import Control.Applicative (liftA2)
 import Control.DeepSeq (NFData)
 import Control.Monad (when)
@@ -208,6 +213,7 @@ import GHC.Base (build)
 import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#,dataToTag#,Int(..))
 
 import qualified Control.DeepSeq as DS
+import qualified Control.Applicative as A
 import qualified Prelude
 
 -- | A typeclass that is satisfied by all types. This is used
@@ -1285,6 +1291,60 @@ mapM_ :: (Contiguous arr, Element arr a, Element arr b, Applicative f)
   -> f ()
 mapM_ = traverse_
 {-# inline mapM_ #-}
+
+-- | 'forM' is 'mapM' with its arguments flipped. For a version that
+--   ignores its results, see 'forM_'.
+forM ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  , Monad m
+  ) => arr1 a
+    -> (a -> m b)
+    -> m (arr2 b)
+forM = flip mapM
+{-# inline forM #-}
+
+-- | 'forM_' is 'mapM_' with its arguments flipped. For a version that
+--   doesn't ignore its results, see 'forM'.
+forM_ :: (Contiguous arr, Element arr a, Element arr b, Applicative f)
+  => (a -> f b)
+  -> arr a
+  -> f ()
+forM_ = traverse_
+{-# inline forM_ #-}
+
+-- | Evaluate each action in the structure from left to right
+--   and collect the results. For a version that ignores the
+--   results see 'sequence_'.
+sequence ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 (f a)
+  , Element arr2 a
+  , Applicative f
+  ) => arr1 (f a) -> f (arr2 a)
+sequence = traverse id
+{-# inline sequence #-}
+
+-- | Evaluate each action in the structure from left to right
+--   and ignore the results. For a version that doesn't ignore
+--   the results see 'sequence'.
+sequence_ ::
+  ( Contiguous arr
+  , Element arr (f a)
+  , Applicative f
+  ) => arr (f a) -> f ()
+sequence_ = foldr (*>) (pure ())
+{-# inline sequence_ #-}
+
+asum ::
+  ( Contiguous arr
+  , Element arr (f a)
+  , A.Alternative f
+  ) => arr (f a) -> f a
+asum = foldr (A.<|>) A.empty
 
 -- | Construct an array of the given length by applying
 --   the function to each index.
