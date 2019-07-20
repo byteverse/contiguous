@@ -124,6 +124,10 @@ module Data.Primitive.Contiguous
   , itraverse
   , itraverse_
   , traverseP
+  , mapM
+  , mapM_
+  , for
+  , for_
 
     -- * Typeclass method defaults
   , (<$)
@@ -186,7 +190,7 @@ module Data.Primitive.Contiguous
   , MutableUnliftedArray
   ) where
 
-import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$),elem,maximum,minimum,mapM)
+import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$),elem,maximum,minimum,mapM,mapM_)
 import Control.Applicative (liftA2)
 import Control.DeepSeq (NFData)
 import Control.Monad (when)
