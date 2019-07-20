@@ -97,6 +97,9 @@ module Data.Primitive.Contiguous
   , partitionEithers
     -- ** Searching
   , find
+  , elem
+  , maximum
+  , minimum
     -- ** Comparing for equality
   , equals
   , equalsMutable
@@ -183,7 +186,7 @@ module Data.Primitive.Contiguous
   , MutableUnliftedArray
   ) where
 
-import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$))
+import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$),elem,maximum,minimum,mapM)
 import Control.Applicative (liftA2)
 import Control.DeepSeq (NFData)
 import Control.Monad (when)
@@ -201,6 +204,7 @@ import GHC.Base (build)
 import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#,dataToTag#,Int(..))
 
 import qualified Control.DeepSeq as DS
+import qualified Prelude
 
 -- | A typeclass that is satisfied by all types. This is used
 -- used to provide a fake constraint for 'Array' and 'SmallArray'.
@@ -1155,10 +1159,16 @@ runSTA !sz (STA m) = runST $ new sz >>= \ ar -> m ar
 -- | Map each element of the array to an action, evaluate these
 --   actions from left to right, and collect the results.
 --   For a version that ignores the results, see 'traverse_'.
-traverse :: (Contiguous arr, Element arr a, Element arr b, Applicative f)
+traverse ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  , Applicative f
+  )
   => (a -> f b)
-  -> arr a
-  -> f (arr b)
+  -> arr1 a
+  -> f (arr2 b)
 traverse f = itraverse (const f)
 {-# inline traverse #-}
 
@@ -1175,10 +1185,15 @@ traverse_ f = itraverse_ (const f)
 -- | Map each element of the array and its index to an action,
 --   evaluating these actions from left to right.
 itraverse ::
-     (Contiguous arr, Element arr a, Element arr b, Applicative f)
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  , Applicative f
+  )
   => (Int -> a -> f b)
-  -> arr a
-  -> f (arr b)
+  -> arr1 a
+  -> f (arr2 b)
 itraverse f ary =
   let !len = size ary
       go !ix
@@ -1205,6 +1220,67 @@ itraverse_ f a = go 0 where
   go !ix = when (ix < sz) $
     f ix (index a ix) *> go (ix + 1)
 {-# inline itraverse_ #-}
+
+-- | 'for' is 'traverse' with its arguments flipped. For a version
+--   that ignores the results see 'for_'.
+for ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  , Applicative f
+  )
+  => arr1 a
+  -> (a -> f b)
+  -> f (arr2 b)
+for = flip traverse
+{-# inline for #-}
+
+-- | 'for_' is 'traverse_' with its arguments flipped. For a version
+--   that doesn't ignore the results see 'for'.
+--
+--   >>> for_ (C.fromList [1..4] :: PrimArray Int) print
+--   1
+--   2
+--   3
+--   4
+for_ :: (Contiguous arr, Element arr a, Applicative f)
+  => arr a
+  -> (a -> f b)
+  -> f ()
+for_ = flip traverse_
+{-# inline for_ #-}
+
+-- | Map each element of a structure to a monadic action,
+--   evaluate these actions from left to right, and collect
+--   the results. for a version that ignores the results see
+--   'mapM_'.
+mapM ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  , Monad m
+  ) => (a -> m b)
+    -> arr1 a
+    -> m (arr2 b)
+mapM f arr =
+  let !sz = size arr
+  in generateM sz $ \ix -> indexM arr ix >>= f
+{-# inline mapM #-}
+
+-- | Map each element of a structure to a monadic action,
+--   evaluate these actions from left to right, and ignore
+--   the results. For a version that doesn't ignore the results
+--   see 'mapM'.
+--
+--   'mapM_' = 'traverse_'
+mapM_ :: (Contiguous arr, Element arr a, Element arr b, Applicative f)
+  => (a -> f b)
+  -> arr a
+  -> f ()
+mapM_ = traverse_
+{-# inline mapM_ #-}
 
 -- | Construct an array of the given length by applying
 --   the function to each index.
@@ -1319,7 +1395,7 @@ create x = runST (unsafeFreeze =<< x)
 createT :: (Contiguous arr, Element arr a, Traversable f)
   => (forall s. ST s (f (Mutable arr s a)))
   -> f (arr a)
-createT p = runST (mapM unsafeFreeze =<< p)
+createT p = runST (Prelude.mapM unsafeFreeze =<< p)
 {-# inline createT #-}
 
 -- | Construct an array by repeatedly applying a generator
@@ -1596,6 +1672,43 @@ combine :: Int -> Int -> Int
 combine h1 h2 = (h1 * 16777619) `xor` h2
 {-# inline combine #-}
 
+-- | Does the element occur in the structure?
+elem :: (Contiguous arr, Element arr a, Eq a) => a -> arr a -> Bool
+elem a !arr =
+  let !sz = size arr
+      go !ix
+        | ix < sz = case index# arr ix of
+            !(# x #) -> if a == x
+              then True
+              else go (ix + 1)
+        | otherwise = False
+  in go 0
+{-# inline elem #-}
+
+-- | The largest element of a structure.
+maximum :: (Contiguous arr, Element arr a, Ord a) => arr a -> Maybe a
+maximum arr =
+  let !sz = size arr
+      go !ix o
+        | ix < sz = case index# arr ix of
+            !(# x #) -> go (ix + 1) (if x > o then x else o)
+        | otherwise = o
+  in if sz == 0
+    then Nothing
+    else Just (go 0 (index arr 0))
+
+-- | The least element of a structure.
+minimum :: (Contiguous arr, Element arr a, Ord a) => arr a -> Maybe a
+minimum arr =
+  let !sz = size arr
+      go !ix o
+        | ix < sz = case index# arr ix of
+            !(# x #) -> go (ix + 1) (if x < o then x else o)
+        | otherwise = o
+  in if sz == 0
+    then Nothing
+    else Just (go 0 (index arr 0))
+
 -- | 'find' takes a predicate and an array, and returns the leftmost
 --   element of the array matching the prediate, or 'Nothing' if there
 --   is no such predicate.
@@ -1732,7 +1845,7 @@ iscanl ::
     -> b
     -> arr1 a
     -> arr2 b
-iscanl f q as = internalScanl (size as + 1) 0 0 f q as
+iscanl f q as = internalScanl (size as + 1) f q as
 {-# inline iscanl #-}
 
 -- | A strictly accumulating version of 'scanl'.
@@ -1761,31 +1874,25 @@ iscanl' ::
 iscanl' f !q as = internalScanl' (size as + 1) f q as
 {-# inline iscanl' #-}
 
--- Internal only. This function helps prevent duplication.
--- The first argument is the size of the array argument.
--- The second argument is the index at which to start reading.
--- The third argument is the index at which to start writing.
+-- Internal only. The first argument is the size of the array
+-- argument. This function helps prevent duplication.
 internalScanl ::
   ( Contiguous arr1
   , Contiguous arr2
   , Element arr1 a
   , Element arr2 b
   ) => Int
-    -> Int
-    -> Int
     -> (Int -> b -> a -> b)
     -> b
     -> arr1 a
     -> arr2 b
-internalScanl !sz !readIx !writeIx f q as = create $ do
+internalScanl !sz f !q as = create $ do
   !marr <- new sz
-  let go !rix !wix acc = if rix < sz
-        then do
-          write marr wix acc
-          x <- indexM as rix
-          go (rix + 1) (wix + 1) (f rix acc x)
-        else pure ()
-  go readIx writeIx q
+  let go !ix acc = when (ix < sz) $ do
+        write marr ix acc
+        x <- indexM as ix
+        go (ix + 1) (f ix acc x)
+  go 0 q
   pure marr
 {-# inline internalScanl #-}
 
@@ -1803,12 +1910,10 @@ internalScanl' ::
     -> arr2 b
 internalScanl' !sz f !q as = create $ do
   !marr <- new sz
-  let go !ix !acc = if ix < sz
-        then do
-          write marr ix acc
-          x <- indexM as ix
-          go (ix + 1) (f ix acc x)
-        else pure ()
+  let go !ix !acc = when (ix < sz) $ do
+        write marr ix acc
+        x <- indexM as ix
+        go (ix + 1) (f ix acc x)
   go 0 q
   pure marr
 {-# inline internalScanl' #-}
@@ -1843,7 +1948,8 @@ iprescanl ::
     -> b
     -> arr1 a
     -> arr2 b
-iprescanl f q as = internalScanl (size as) 0 0 f q as
+iprescanl f q as = internalScanl (size as) f q as
+{-# inline iprescanl #-}
 
 -- | Like 'prescanl', but with a strict accumulator.
 prescanl' ::
@@ -1870,38 +1976,6 @@ iprescanl' ::
     -> arr2 b
 iprescanl' f !q as = internalScanl' (size as) f q as
 {-# inline iprescanl' #-}
-
-{-
-ipostscanl ::
-  ( Contiguous arr1
-  , Contiguous arr2
-  , Element arr1 a
-  , Element arr2 b
-  ) => (Int -> b -> a -> b)
-    -> b
-    -> arr1 a
-    -> arr2 b
-ipostscanl f q as =
-  let go !n = if n == 0
-        then empty
-        else
-          let !ix = 0
-              !(# x #) = index# as ix
-              q' = f ix q x
-           in internalScanl n 1 0 f q' as
-  in go (size as)
-
-postscanl ::
-  ( Contiguous arr1
-  , Contiguous arr2
-  , Element arr1 a
-  , Element arr2 b
-  ) => (b -> a -> b)
-    -> b
-    -> arr1 a
-    -> arr2 b
-postscanl f = ipostscanl (const f)
--}
 
 -- | 'zipWith' generalises 'zip' by zipping with the function
 --   given as the first argument, instead of a tupling function.
@@ -1988,5 +2062,4 @@ ap fs xs = create $ do
     !szfs = size fs
     !szxs = size xs
 {-# inline ap #-}
-
 
