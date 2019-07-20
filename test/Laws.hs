@@ -14,7 +14,10 @@ main = lawsCheckMany laws
 
 laws :: [(String, [Laws])]
 laws =
-  [ ("Arr", [functorLaws arr, applicativeLaws arr])
+  [ ("Arr", [ functorLaws arr
+            , applicativeLaws arr
+            ]
+    )
   ]
 
 newtype Arr a = Arr (Array a)
