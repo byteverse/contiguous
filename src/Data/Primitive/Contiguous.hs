@@ -1079,11 +1079,11 @@ mapMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   => (a -> a)
   -> Mutable arr (PrimState m) a
   -> m ()
-mapMutable f = \ !mary -> do
-  !sz <- sizeMutable mary
+mapMutable f !marr = do
+  !sz <- sizeMutable marr
   let go !ix = when (ix < sz) $ do
-        a <- read mary ix
-        write mary ix (f a)
+        a <- read marr ix
+        write marr ix (f a)
         go (ix + 1)
   go 0
 {-# inline mapMutable #-}
@@ -1093,16 +1093,13 @@ mapMutable' :: (PrimMonad m, Contiguous arr, Element arr a)
   => (a -> a)
   -> Mutable arr (PrimState m) a
   -> m ()
-mapMutable' f = \ !mary -> do
-  !sz <- sizeMutable mary
-  let
-    go !i
-      | i == sz = pure ()
-      | otherwise = do
-          a <- read mary i
-          let !b = f a
-          write mary i b
-          go (i + 1)
+mapMutable' f !marr = do
+  !sz <- sizeMutable marr
+  let go !ix = when (ix < sz) $ do
+        a <- read marr ix
+        let !b = f a
+        write marr ix b
+        go (ix + 1)
   go 0
 {-# inline mapMutable' #-}
 
@@ -1111,11 +1108,11 @@ imapMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   => (Int -> a -> a)
   -> Mutable arr (PrimState m) a
   -> m ()
-imapMutable f = \ !mary -> do
-  !sz <- sizeMutable mary
+imapMutable f !marr = do
+  !sz <- sizeMutable marr
   let go !ix = when (ix < sz) $ do
-        a <- read mary ix
-        write mary ix (f ix a)
+        a <- read marr ix
+        write marr ix (f ix a)
         go (ix + 1)
   go 0
 {-# inline imapMutable #-}
@@ -1125,16 +1122,13 @@ imapMutable' :: (PrimMonad m, Contiguous arr, Element arr a)
   => (Int -> a -> a)
   -> Mutable arr (PrimState m) a
   -> m ()
-imapMutable' f = \ !mary -> do
-  !sz <- sizeMutable mary
-  let
-    go !i
-      | i == sz = pure ()
-      | otherwise = do
-          a <- read mary i
-          let !b = f i a
-          write mary i b
-          go (i + 1)
+imapMutable' f !marr = do
+  !sz <- sizeMutable marr
+  let go !ix = when (ix < sz) $ do
+        a <- read marr ix
+        let !b = f ix a
+        write marr ix b
+        go (ix + 1)
   go 0
 {-# inline imapMutable' #-}
 
@@ -1145,25 +1139,22 @@ traverseP :: (PrimMonad m, Contiguous arr1, Contiguous arr2, Element arr1 a, Ele
   => (a -> m b)
   -> arr1 a
   -> m (arr2 b)
-traverseP f = \ !ary ->
-  let
-    !sz = size ary
-    go !i !mary
-      | i == sz = unsafeFreeze mary
-      | otherwise = do
-          a <- indexM ary i
-          b <- f a
-          write mary i b
-          go (i + 1) mary
-  in do
-      mary <- new sz
-      go 0 mary
+traverseP f !arr = do
+  let !sz = size arr
+  !marr <- new sz
+  let go !ix = when (ix < sz) $ do
+        a <- indexM arr ix
+        b <- f a
+        write marr ix b
+        go (ix + 1)
+  go 0
+  unsafeFreeze marr
 {-# inline traverseP #-}
 
 newtype STA v a = STA {_runSTA :: forall s. Mutable v s a -> ST s (v a)}
 
 runSTA :: (Contiguous v, Element v a) => Int -> STA v a -> v a
-runSTA !sz (STA m) = runST $ new sz >>= \ ar -> m ar
+runSTA !sz (STA m) = runST $ new sz >>= m
 {-# inline runSTA #-}
 
 -- | Map each element of the array to an action, evaluate these
@@ -1207,11 +1198,15 @@ itraverse ::
 itraverse f ary =
   let !len = size ary
       go !ix
-        | ix == len = pure $ STA $ \mary -> unsafeFreeze mary
+        | ix == len = pure (STA unsafeFreeze)
         | (# x #) <- index# ary ix
-        = liftA2 (\b (STA m) -> STA $ \mary ->
-                   write mary ix b >> m mary)
-                 (f ix x) (go (ix + 1))
+        = liftA2
+            (\b (STA m) -> STA $ \marr -> do
+              write marr ix b
+              m marr
+            )
+            (f ix x)
+            (go (ix + 1))
    in if len == 0
         then pure empty
         else runSTA len <$> go 0
