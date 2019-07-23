@@ -1887,20 +1887,6 @@ partitionEithers !arr = runST $ do
   pure (arrA, arrB)
 {-# inline partitionEithers #-}
 
-{-
--- | ('<*>') on lifted arrays.
-
--- TODO: this is not very efficient.
-apply ::
-  ( Contiguous arr
-  , Element arr (a -> b)
-  , Element arr a
-  , Element arr b
-  ) => arr (a -> b) -> arr a -> arr b
-apply f x = fromList (toList f <*> toList x)
-{-# inline apply #-}
--}
-
 -- | 'scanl' is similar to 'foldl', but returns an array of
 --   successive reduced values from the left:
 --
