@@ -343,7 +343,7 @@ instance Contiguous SmallArray where
     _ -> False
   freeze = freezeSmallArray
   size = sizeofSmallArray
-  sizeMutable = pure . sizeofSmallMutableArray
+  sizeMutable = (\x -> pure $! sizeofSmallMutableArray x)
   unsafeFreeze = unsafeFreezeSmallArray
   thaw = thawSmallArray
   equals = (==)
@@ -492,7 +492,7 @@ instance Contiguous Array where
   write = writeArray
   resize = resizeArray
   size = sizeofArray
-  sizeMutable = pure . sizeofMutableArray
+  sizeMutable = (\x -> pure $! sizeofMutableArray x)
   freeze = freezeArray
   unsafeFreeze = unsafeFreezeArray
   thaw = thawArray
@@ -745,101 +745,97 @@ convert a = map id a
 -- | Right fold over the element of an array.
 foldr :: (Contiguous arr, Element arr a) => (a -> b -> b) -> b -> arr a -> b
 {-# inline foldr #-}
-foldr f z arr = go 0
-  where
-    !sz = size arr
-    go !i
-      | sz > i = case index# arr i of
-          (# x #) -> f x (go (i+1))
-      | otherwise = z
+foldr f z = \arr ->
+  let !sz = size arr
+      go !ix = if sz > ix
+        then case index# arr ix of
+          (# x #) -> f x (go (ix + 1))
+        else z
+  in go 0
 
 -- | Strict right fold over the elements of an array.
 foldr' :: (Contiguous arr, Element arr a) => (a -> b -> b) -> b -> arr a -> b
-foldr' f !z !ary =
-  let
-    go i !acc
-      | i == -1 = acc
-      | !(# x #) <- index# ary i
-      = go (i-1) (f x acc)
-  in go (size ary - 1) z
+foldr' f !z = \arr ->
+  let go !ix !acc = if ix == -1
+        then acc
+        else case index# arr ix of
+          (# x #) -> go (ix - 1) (f x acc)
+  in go (size arr - 1) z
 {-# inline foldr' #-}
 
 -- | Left fold over the elements of an array.
 foldl :: (Contiguous arr, Element arr a) => (b -> a -> b) -> b -> arr a -> b
-foldl f z ary = go 0 z
-  where
-    !sz = size ary
-    go !i acc
-      | i == sz = acc
-      | otherwise = let (# x #) = index# ary i in go (i+1) (f acc x)
+foldl f z = \arr ->
+  let !sz = size arr
+      go !ix acc = if ix == sz
+        then acc
+        else case index# arr ix of
+          (# x #) -> go (ix + 1) (f acc x)
+  in go 0 z
+{-# inline foldl #-}
 
 -- | Strict left fold over the elements of an array.
 foldl' :: (Contiguous arr, Element arr a) => (b -> a -> b) -> b -> arr a -> b
-foldl' f !z !ary =
-  let
-    !sz = size ary
-    go !i !acc
-      | i == sz = acc
-      | !(# x #) <- index# ary i = go (i+1) (f acc x)
+foldl' f !z = \arr ->
+  let !sz = size arr
+      go !ix !acc = if ix == sz
+        then acc
+        else case index# arr ix of
+          (# x #) -> go (ix + 1) (f acc x)
   in go 0 z
 {-# inline foldl' #-}
 
 -- | Strict left fold over the elements of an array, where the accumulating
 --   function cares about the index of the element.
 ifoldl' :: (Contiguous arr, Element arr a) => (b -> Int -> a -> b) -> b -> arr a -> b
-ifoldl' f !z !ary =
-  let
-    !sz = size ary
-    go !i !acc
-      | i == sz = acc
-      | (# x #) <- index# ary i = go (i+1) (f acc i x)
+ifoldl' f !z = \arr ->
+  let !sz = size arr
+      go !ix !acc = if ix == sz
+        then acc
+        else case index# arr ix of
+          (# x #) -> go (ix + 1) (f acc ix x)
   in go 0 z
 {-# inline ifoldl' #-}
 
 -- | Strict right fold over the elements of an array, where the accumulating
 --   function cares about the index of the element.
 ifoldr' :: (Contiguous arr, Element arr a) => (Int -> a -> b -> b) -> b -> arr a -> b
-ifoldr' f !z !arr =
+ifoldr' f !z = \arr ->
   let !sz = size arr
-      go !i !acc = if i == (-1)
+      go !ix !acc = if ix == (-1)
         then acc
-        else let !(# x #) = index# arr i in go (i-1) (f i x acc)
-   in go (sz-1) z
+        else case index# arr ix of
+          (# x #) -> go (ix - 1) (f ix x acc)
+  in go (sz - 1) z
 {-# inline ifoldr' #-}
 
 -- | Monoidal fold over the element of an array.
 foldMap :: (Contiguous arr, Element arr a, Monoid m) => (a -> m) -> arr a -> m
-foldMap f arr = go 0
-  where
-    !sz = size arr
-    go !i
-      | sz > i = case index# arr i of
-          (# x #) -> mappend (f x) (go (i+1))
-      | otherwise = mempty
+foldMap f = \arr ->
+  let !sz = size arr
+      go !ix = if sz > ix
+        then case index# arr ix of
+          (# x #) -> mappend (f x) (go (ix + 1))
+        else mempty
+  in go 0
 {-# inline foldMap #-}
 
 -- | Strict monoidal fold over the elements of an array.
 foldMap' :: (Contiguous arr, Element arr a, Monoid m)
   => (a -> m) -> arr a -> m
-foldMap' f !ary =
-  let
-    !sz = size ary
-    go !i !acc
-      | i == sz = acc
-      | (# x #) <- index# ary i = go (i+1) (mappend acc (f x))
+foldMap' f = \arr ->
+  let !sz = size arr
+      go !ix !acc = if ix == sz
+        then acc
+        else case index# arr ix
+          of (# x #) -> go (ix + 1) (mappend acc (f x))
   in go 0 mempty
 {-# inline foldMap' #-}
 
 -- | Strict left monoidal fold over the elements of an array.
 foldlMap' :: (Contiguous arr, Element arr a, Monoid m)
   => (a -> m) -> arr a -> m
-foldlMap' f !ary =
-  let
-    !sz = size ary
-    go !i !acc
-      | i == sz = acc
-      | (# x #) <- index# ary i = go (i+1) (mappend acc (f x))
-  in go 0 mempty
+foldlMap' = foldMap'
 {-# inline foldlMap' #-}
 
 -- | Strict monoidal fold over the elements of an array.
@@ -847,12 +843,12 @@ ifoldlMap' :: (Contiguous arr, Element arr a, Monoid m)
   => (Int -> a -> m)
   -> arr a
   -> m
-ifoldlMap' f !ary =
-  let
-    !sz = size ary
-    go !i !acc
-      | i == sz = acc
-      | (# x #) <- index# ary i = go (i+1) (mappend acc (f i x))
+ifoldlMap' f = \arr ->
+  let !sz = size arr
+      go !ix !acc = if ix == sz
+        then acc
+        else case index# arr ix of
+          (# x #) -> go (ix + 1) (mappend acc (f ix x))
   in go 0 mempty
 {-# inline ifoldlMap' #-}
 
@@ -861,27 +857,27 @@ ifoldlMap1' :: (Contiguous arr, Element arr a, Semigroup m)
   => (Int -> a -> m)
   -> arr a
   -> m
-ifoldlMap1' f !ary =
-  let
-    !sz = size ary
-    go !i !acc
-      | i == sz = acc
-      | (# x #) <- index# ary i = go (i+1) (acc <> f i x)
-    !(# e0 #) = index# ary 0
+ifoldlMap1' f = \arr ->
+  let !sz = size arr
+      go !ix !acc = if ix == sz
+        then acc
+        else case index# arr ix of
+          (# x #) -> go (ix + 1) (acc <> f ix x)
+      !(# e0 #) = index# arr 0
   in go 1 (f 0 e0)
 {-# inline ifoldlMap1' #-}
 
 -- | Strict left monadic fold over the elements of an array.
 foldlM' :: (Contiguous arr, Element arr a, Monad m) => (b -> a -> m b) -> b -> arr a -> m b
-foldlM' f z0 arr = go 0 z0
-  where
-    !sz = size arr
-    go !i !acc1
-      | i < sz = do
-          let (# x #) = index# arr i
+foldlM' f z0 = \arr ->
+  let !sz = size arr
+      go !ix !acc1 = if ix < sz
+        then do
+          let (# x #) = index# arr ix
           acc2 <- f acc1 x
-          go (i + 1) acc2
-      | otherwise = pure acc1
+          go (ix + 1) acc2
+        else pure acc1
+  in go 0 z0
 {-# inline foldlM' #-}
 
 -- | Drop elements that do not satisfy the predicate.
