@@ -1194,21 +1194,21 @@ itraverse ::
   => (Int -> a -> f b)
   -> arr1 a
   -> f (arr2 b)
-itraverse f ary =
-  let !len = size ary
-      go !ix
-        | ix == len = pure (STA unsafeFreeze)
-        | (# x #) <- index# ary ix
-        = liftA2
+itraverse f = \arr ->
+  let !sz = size arr
+      go !ix = if ix == sz
+        then pure (STA unsafeFreeze)
+        else case index# arr ix of
+          (# x #) -> liftA2
             (\b (STA m) -> STA $ \marr -> do
               write marr ix b
               m marr
             )
             (f ix x)
             (go (ix + 1))
-   in if len == 0
-        then pure empty
-        else runSTA len <$> go 0
+  in if sz == 0
+    then pure empty
+    else runSTA sz <$> go 0
 {-# inline itraverse #-}
 
 -- | Map each element of the array and its index to an action,
@@ -1219,10 +1219,11 @@ itraverse_ ::
   => (Int -> a -> f b)
   -> arr a
   -> f ()
-itraverse_ f a = go 0 where
-  !sz = size a
-  go !ix = when (ix < sz) $
-    f ix (index a ix) *> go (ix + 1)
+itraverse_ f = \arr ->
+  let !sz = size arr
+      go !ix = when (ix < sz) $
+        f ix (index arr ix) *> go (ix + 1)
+  in go 0
 {-# inline itraverse_ #-}
 
 -- | 'for' is 'traverse' with its arguments flipped. For a version

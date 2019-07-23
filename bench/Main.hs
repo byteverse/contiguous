@@ -288,6 +288,25 @@ main = do
         func "primArray10" mapPlus1' primArray10
         func "primArray100" mapPlus1' primArray100
         func "primArray1000" mapPlus1' primArray1000
+      wgroup "mapMaybe" $ do
+        func "array10" mapMaybeJ array10
+        func "array100" mapMaybeJ array100
+        func "array1000" mapMaybeJ array1000
+
+        func "smallArray10" mapMaybeJ smallArray10
+        func "smallArray100" mapMaybeJ smallArray100
+        func "smallArray1000" mapMaybeJ smallArray1000
+
+        func "primArray10" mapMaybeJ primArray10
+        func "primArray100" mapMaybeJ primArray100
+        func "primArray1000" mapMaybeJ primArray1000
+
+mapMaybeJ :: forall arr. (Contiguous arr, Element arr Int)
+  => arr Int
+  -> ()
+mapMaybeJ arr =
+  let !(arr' :: arr Int) = mapMaybe Just arr
+   in ()
 
 mapPlus1 :: forall arr. (Contiguous arr, Element arr Int)
   => arr Int -> ()
