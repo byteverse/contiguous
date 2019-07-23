@@ -700,7 +700,7 @@ imap' f a = runST $ do
             go (i + 1)
   go 0
   unsafeFreeze mb
-{-# INLINABLE imap' #-}
+{-# inline imap' #-}
 
 -- | Map over the elements of an array.
 --
