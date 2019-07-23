@@ -1,5 +1,9 @@
 {-# language InstanceSigs, TypeFamilies, UndecidableInstances #-}
 
+-- We define a newtype around `Array a` for the purpose of testing
+-- the definitions of many typeclass methods from `Data.Primitive.Contiguous`.
+-- Testing the lawfulness of such a proxy lets us establish a higher
+-- level of confidence that these implementations are correct.
 module Main (main) where
 
 import Data.Foldable
