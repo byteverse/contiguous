@@ -246,4 +246,14 @@ instance Arbitrary a => Arbitrary (Array' a) where
     fmap Exts.fromList $ vectorOf k arbitrary
   shrink xs = fmap Exts.fromList $ shrink $ Exts.toList xs
 
+-- Get around quickcheck not generating multiple arrays
+--newtype GenArrM = GenArr { getGenArrM :: Array Int }
+--  deriving (Eq, Show, Exts.IsList)
+
+--instance Arbitrary GenArrM where
+--  arbitrary = do
+--    k <- choose (2,20)
+--    GenArrM <$> C.generateM k (const arbitrary)
+--  shrink xs = fmap Exts.fromList $ shrink $ Exts.toList xs
+
 

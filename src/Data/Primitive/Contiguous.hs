@@ -100,10 +100,13 @@ module Data.Primitive.Contiguous
   , elem
   , maximum
   , minimum
+  , maximumBy
+  , minimumBy
     -- ** Comparing for equality
   , equals
   , equalsMutable
   , same
+
     -- * Folds
   , foldl
   , foldl'
