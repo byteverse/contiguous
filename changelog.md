@@ -1,3 +1,7 @@
+0.5.1: [2019.07.23]
+-----------------
+* Add `izipWith`.
+
 0.5: [2019.07.23]
 -----------------
 * Add `generateM`, `reverseSlice`, `swap`, `catMaybes`,

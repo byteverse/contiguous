@@ -83,6 +83,7 @@ module Data.Primitive.Contiguous
     -- ** Zipping
   , zip
   , zipWith
+  , izipWith
 
     -- ** Specific elements
   , swap
@@ -2060,18 +2061,33 @@ zipWith ::
     -> arr1 a
     -> arr2 b
     -> arr3 c
-zipWith f as bs = create $ do
+zipWith f = izipWith (\_ a b -> f a b)
+{-# inline zipWith #-}
+
+-- | Variant of 'zipWith' that provides the index of each pair of elements.
+izipWith ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Contiguous arr3
+  , Element arr1 a
+  , Element arr2 b
+  , Element arr3 c
+  ) => (Int -> a -> b -> c)
+    -> arr1 a
+    -> arr2 b
+    -> arr3 c
+izipWith f as bs = create $ do
   let !sz = min (size as) (size bs)
   !marr <- new sz
   let go !ix = when (ix < sz) $ do
         a <- indexM as ix
         b <- indexM bs ix
-        let !g = f a b
+        let !g = f ix a b
         write marr ix g
         go (ix + 1)
   go 0
   pure marr
-{-# inline zipWith #-}
+{-# inline izipWith #-}
 
 -- | 'zip' takes two arrays and returns an array of
 --   corresponding pairs.
