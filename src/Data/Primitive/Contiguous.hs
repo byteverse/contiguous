@@ -427,8 +427,8 @@ instance Contiguous PrimArray where
   thaw = thawPrimArray
   copy = copyPrimArray
   copyMutable = copyMutablePrimArray
-  clone = clonePrimArray
-  cloneMutable = cloneMutablePrimArray
+  clone = clonePrimArrayShim
+  cloneMutable = cloneMutablePrimArrayShim
   equals = (==)
   unlift (PrimArray x) = unsafeCoerce# x
   lift x = PrimArray (unsafeCoerce# x)
@@ -968,19 +968,19 @@ thawPrimArray !arr !off !len = do
   pure marr
 {-# inline thawPrimArray #-}
 
-clonePrimArray :: Prim a => PrimArray a -> Int -> Int -> PrimArray a
-clonePrimArray !arr !off !len = runST $ do
+clonePrimArrayShim :: Prim a => PrimArray a -> Int -> Int -> PrimArray a
+clonePrimArrayShim !arr !off !len = runST $ do
   marr <- newPrimArray len
   copyPrimArray marr 0 arr off len
   unsafeFreezePrimArray marr
-{-# inline clonePrimArray #-}
+{-# inline clonePrimArrayShim #-}
 
-cloneMutablePrimArray :: (PrimMonad m, Prim a) => MutablePrimArray (PrimState m) a -> Int -> Int -> m (MutablePrimArray (PrimState m) a)
-cloneMutablePrimArray !arr !off !len = do
+cloneMutablePrimArrayShim :: (PrimMonad m, Prim a) => MutablePrimArray (PrimState m) a -> Int -> Int -> m (MutablePrimArray (PrimState m) a)
+cloneMutablePrimArrayShim !arr !off !len = do
   marr <- newPrimArray len
   copyMutablePrimArray marr 0 arr off len
   pure marr
-{-# inline cloneMutablePrimArray #-}
+{-# inline cloneMutablePrimArrayShim #-}
 
 -- | @'replicate' n x@ is an array of length @n@ with @x@ the value of every element.
 replicate :: (Contiguous arr, Element arr a) => Int -> a -> arr a
