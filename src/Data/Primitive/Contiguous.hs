@@ -422,7 +422,7 @@ instance Contiguous PrimArray where
   resize = resizeMutablePrimArray
   size = sizeofPrimArray
   sizeMutable = getSizeofMutablePrimArray
-  freeze = freezePrimArray
+  freeze = freezePrimArrayShim
   unsafeFreeze = unsafeFreezePrimArray
   thaw = thawPrimArray
   copy = copyPrimArray
@@ -632,12 +632,12 @@ errorThunk :: a
 errorThunk = error "Contiguous typeclass: unitialized element"
 {-# noinline errorThunk #-}
 
-freezePrimArray :: (PrimMonad m, Prim a) => MutablePrimArray (PrimState m) a -> Int -> Int -> m (PrimArray a)
-freezePrimArray !src !off !len = do
+freezePrimArrayShim :: (PrimMonad m, Prim a) => MutablePrimArray (PrimState m) a -> Int -> Int -> m (PrimArray a)
+freezePrimArrayShim !src !off !len = do
   dst <- newPrimArray len
   copyMutablePrimArray dst 0 src off len
   unsafeFreezePrimArray dst
-{-# inline freezePrimArray #-}
+{-# inline freezePrimArrayShim #-}
 
 resizeArray :: PrimMonad m => MutableArray (PrimState m) a -> Int -> m (MutableArray (PrimState m) a)
 resizeArray !src !sz = do
