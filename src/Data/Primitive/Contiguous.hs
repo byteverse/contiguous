@@ -42,6 +42,8 @@ module Data.Primitive.Contiguous
   , iterateN
   , iterateMutableN
   , write
+    -- ** Running
+  , run
     -- ** Monadic initialisation
   , replicateMutableM
   , generateMutableM
@@ -220,7 +222,7 @@ import Data.Semigroup (Semigroup,(<>),First(..))
 import Data.Word (Word8)
 import GHC.Base (build)
 import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#,dataToTag#,Int(..))
-import Control.Monad.ST.Run (runPrimArrayST)
+import Control.Monad.ST.Run (runPrimArrayST,runSmallArrayST,runUnliftedArrayST,runArrayST)
 
 import qualified Control.DeepSeq as DS
 import qualified Control.Applicative as A
@@ -334,6 +336,8 @@ class Contiguous (arr :: Type -> Type) where
   tripleton :: Element arr a => a -> a -> a -> arr a
   -- | Reduce the array and all of its elements to WHNF.
   rnf :: (NFData a, Element arr a) => arr a -> ()
+  -- | Run an effectful computation that produces an array.
+  run :: (forall s. ST s (arr a)) -> arr a
 
 instance Contiguous SmallArray where
   type Mutable SmallArray = SmallMutableArray
@@ -386,6 +390,7 @@ instance Contiguous SmallArray where
   copyMutable = copySmallMutableArray
   replicateMutable = replicateSmallMutableArray
   resize = resizeSmallArray
+  run = runSmallArrayST
   {-# inline empty #-}
   {-# inline null #-}
   {-# inline new #-}
@@ -413,6 +418,7 @@ instance Contiguous SmallArray where
   {-# inline doubleton #-}
   {-# inline tripleton #-}
   {-# inline rnf #-}
+  {-# inline run #-}
 
 instance Contiguous PrimArray where
   type Mutable PrimArray = MutablePrimArray
@@ -443,21 +449,22 @@ instance Contiguous PrimArray where
     _ -> False
   equalsMutable = sameMutablePrimArray
   rnf (PrimArray !_) = ()
-  singleton a = runST $ do
+  singleton a = runPrimArrayST $ do
     marr <- newPrimArray 1
     writePrimArray marr 0 a
     unsafeFreezePrimArray marr
-  doubleton a b = runST $ do
+  doubleton a b = runPrimArrayST $ do
     m <- newPrimArray 2
     writePrimArray m 0 a
     writePrimArray m 1 b
     unsafeFreezePrimArray m
-  tripleton a b c = runST $ do
+  tripleton a b c = runPrimArrayST $ do
     m <- newPrimArray 3
     writePrimArray m 0 a
     writePrimArray m 1 b
     writePrimArray m 2 c
     unsafeFreezePrimArray m
+  run = runPrimArrayST 
   {-# inline empty #-}
   {-# inline null #-}
   {-# inline new #-}
@@ -485,6 +492,7 @@ instance Contiguous PrimArray where
   {-# inline doubleton #-}
   {-# inline tripleton #-}
   {-# inline rnf #-}
+  {-# inline run #-}
 
 instance Contiguous Array where
   type Mutable Array = MutableArray
@@ -522,16 +530,17 @@ instance Contiguous Array where
               let !(# x #) = indexArray## ary i
                in DS.rnf x `seq` go (i+1)
      in go 0
-  singleton a = runST (newArray 1 a >>= unsafeFreezeArray)
-  doubleton a b = runST $ do
+  singleton a = runArrayST (newArray 1 a >>= unsafeFreezeArray)
+  doubleton a b = runArrayST $ do
     m <- newArray 2 a
     writeArray m 1 b
     unsafeFreezeArray m
-  tripleton a b c = runST $ do
+  tripleton a b c = runArrayST $ do
     m <- newArray 3 a
     writeArray m 1 b
     writeArray m 2 c
     unsafeFreezeArray m
+  run = runArrayST
   {-# inline empty #-}
   {-# inline null #-}
   {-# inline new #-}
@@ -559,6 +568,7 @@ instance Contiguous Array where
   {-# inline doubleton #-}
   {-# inline tripleton #-}
   {-# inline rnf #-}
+  {-# inline run #-}
 
 instance Contiguous UnliftedArray where
   type Mutable UnliftedArray = MutableUnliftedArray
@@ -596,16 +606,17 @@ instance Contiguous UnliftedArray where
               let x = indexUnliftedArray ary i
                in DS.rnf x `seq` go (i+1)
      in go 0
-  singleton a = runST (newUnliftedArray 1 a >>= unsafeFreezeUnliftedArray)
-  doubleton a b = runST $ do
+  singleton a = runUnliftedArrayST (newUnliftedArray 1 a >>= unsafeFreezeUnliftedArray)
+  doubleton a b = runUnliftedArrayST $ do
     m <- newUnliftedArray 2 a
     writeUnliftedArray m 1 b
     unsafeFreezeUnliftedArray m
-  tripleton a b c = runST $ do
+  tripleton a b c = runUnliftedArrayST $ do
     m <- newUnliftedArray 3 a
     writeUnliftedArray m 1 b
     writeUnliftedArray m 2 c
     unsafeFreezeUnliftedArray m
+  run = runUnliftedArrayST
   {-# inline empty #-}
   {-# inline null #-}
   {-# inline new #-}
@@ -633,6 +644,7 @@ instance Contiguous UnliftedArray where
   {-# inline doubleton #-}
   {-# inline tripleton #-}
   {-# inline rnf #-}
+  {-# inline run #-}
 
 errorThunk :: a
 errorThunk = error "Contiguous typeclass: unitialized element"
@@ -668,7 +680,7 @@ resizeUnliftedArray !src !sz = do
 
 -- | Append two arrays.
 append :: (Contiguous arr, Element arr a) => arr a -> arr a -> arr a
-append !a !b = runST $ do
+append !a !b = run $ do
   let !szA = size a
   let !szB = size b
   m <- new (szA + szB)
@@ -679,7 +691,7 @@ append !a !b = runST $ do
 
 -- | Map over the elements of an array with the index.
 imap :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (Int -> b -> c) -> arr1 b -> arr2 c
-imap f a = runST $ do
+imap f a = run $ do
   mb <- new (size a)
   let go !i
         | i == size a = pure ()
@@ -696,7 +708,7 @@ imap f a = runST $ do
 --   Note that because a new array must be created, the resulting
 --   array type can be /different/ than the original.
 imap' :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (Int -> b -> c) -> arr1 b -> arr2 c
-imap' f a = runST $ do
+imap' f a = run $ do
   mb <- new (size a)
   let go !i
         | i == size a = pure ()
@@ -714,7 +726,7 @@ imap' f a = runST $ do
 --   Note that because a new array must be created, the resulting
 --   array type can be /different/ than the original.
 map :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (b -> c) -> arr1 b -> arr2 c
-map f a = runST $ do
+map f a = run $ do
   mb <- new (size a)
   let go !i
         | i == size a = pure ()
@@ -731,7 +743,7 @@ map f a = runST $ do
 --   Note that because a new array must be created, the resulting
 --   array type can be /different/ than the original.
 map' :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (b -> c) -> arr1 b -> arr2 c
-map' f a = runST $ do
+map' f a = run $ do
   mb <- new (size a)
   let go !i
         | i == size a = pure ()
@@ -901,7 +913,7 @@ ifilter :: (Contiguous arr, Element arr a)
   => (Int -> a -> Bool)
   -> arr a
   -> arr a
-ifilter p arr = runST $ do
+ifilter p arr = run $ do
   marr :: MutablePrimArray s Word8 <- newPrimArray sz
   let go1 :: Int -> Int -> ST s Int
       go1 !ix !numTrue = if ix < sz
@@ -939,7 +951,7 @@ mapMaybe :: forall arr1 arr2 a b. (Contiguous arr1, Element arr1 a, Contiguous a
   => (a -> Maybe b)
   -> arr1 a
   -> arr2 b
-mapMaybe f arr = runST $ do
+mapMaybe f arr = run $ do
   let !sz = size arr
   let go :: Int -> Int -> [b] -> ST s ([b],Int)
       go !ix !numJusts justs = if ix < sz
@@ -1459,7 +1471,7 @@ iterateMutableNM !len f z0 = do
 create :: (Contiguous arr, Element arr a)
   => (forall s. ST s (Mutable arr s a))
   -> arr a
-create x = runST (unsafeFreeze =<< x)
+create x = run (unsafeFreeze =<< x)
 {-# inline create #-}
 
 -- | Execute the monadic action and freeze the resulting array.
@@ -1692,7 +1704,7 @@ liftHashWithSalt f s0 arr = go 0 s0 where
 reverse :: (Contiguous arr, Element arr a)
   => arr a
   -> arr a
-reverse arr = runST $ do
+reverse arr = run $ do
   marr <- new sz
   copy marr 0 arr 0 sz
   reverseMutable marr
