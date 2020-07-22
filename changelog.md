@@ -2,6 +2,8 @@
 -------------------
 * Add `foldrZipWith` and `ifoldrZipWith`.
 * Add `all` and `any`.
+* Add `run`. Use it internally to accerelate prevent GHC from
+  boxing results in `runST`. 
 
 0.5.1: [2020.06.30]
 -----------------
