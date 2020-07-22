@@ -122,6 +122,7 @@ module Data.Primitive.Contiguous
   , ifoldlMap1'
   , foldlM'
   , asum
+  , all
     -- ** Zipping Folds
   , foldrZipWith
   , ifoldrZipWith
@@ -202,7 +203,7 @@ module Data.Primitive.Contiguous
   , MutableUnliftedArray
   ) where
 
-import Prelude hiding (map,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$),elem,maximum,minimum,mapM,mapM_,sequence,sequence_)
+import Prelude hiding (map,all,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$),elem,maximum,minimum,mapM,mapM_,sequence,sequence_)
 import Control.Applicative (liftA2)
 import Control.DeepSeq (NFData)
 import Control.Monad (when)
@@ -2192,3 +2193,6 @@ ap fs xs = create $ do
     !szxs = size xs
 {-# inline ap #-}
 
+all :: (Contiguous arr, Element arr a) => (a -> Bool) -> arr a -> Bool
+all f = foldr (\x acc -> f x && acc) True
+{-# inline all #-}
