@@ -122,6 +122,9 @@ module Data.Primitive.Contiguous
   , ifoldlMap1'
   , foldlM'
   , asum
+    -- ** Zipping Folds
+  , foldrZipWith
+  , ifoldrZipWith
 
     -- * Traversals
   , traverse
@@ -2088,6 +2091,42 @@ izipWith f as bs = create $ do
   go 0
   pure marr
 {-# inline izipWith #-}
+
+-- | Variant of 'zipWith' that accepts an accumulator, performing a lazy
+-- right fold over both arrays.
+foldrZipWith ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => (a -> b -> c -> c)
+    -> c
+    -> arr1 a
+    -> arr2 b
+    -> c
+foldrZipWith f = ifoldrZipWith (\_ x y c -> f x y c)
+{-# inline foldrZipWith #-}
+
+-- | Variant of 'foldrZipWith' that provides the index of each pair of elements.
+ifoldrZipWith ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => (Int -> a -> b -> c -> c)
+    -> c
+    -> arr1 a
+    -> arr2 b
+    -> c
+ifoldrZipWith f z = \arr1 arr2 ->
+  let !sz = min (size arr1) (size arr2)
+      go !ix = if sz > ix
+        then case index# arr1 ix of
+          (# x #) -> case index# arr2 ix of
+            (# y #) -> f ix x y (go (ix + 1))
+        else z
+  in go 0
+{-# inline ifoldrZipWith #-}
 
 -- | 'zip' takes two arrays and returns an array of
 --   corresponding pairs.
