@@ -1,3 +1,7 @@
+0.5.2: [2020.XX.XX]
+-------------------
+* Add `foldrZipWith` and `ifoldrZipWith`.
+
 0.5.1: [2020.06.30]
 -----------------
 * Add `izipWith`.
