@@ -1,6 +1,7 @@
 0.5.2: [2020.XX.XX]
 -------------------
 * Add `foldrZipWith` and `ifoldrZipWith`.
+* Add `all` and `any`.
 
 0.5.1: [2020.06.30]
 -----------------
