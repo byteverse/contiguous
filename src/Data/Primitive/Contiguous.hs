@@ -220,6 +220,7 @@ import Data.Semigroup (Semigroup,(<>),First(..))
 import Data.Word (Word8)
 import GHC.Base (build)
 import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#,dataToTag#,Int(..))
+import Control.Monad.ST.Run (runPrimArrayST)
 
 import qualified Control.DeepSeq as DS
 import qualified Control.Applicative as A
@@ -974,7 +975,7 @@ thawPrimArray !arr !off !len = do
 {-# inline thawPrimArray #-}
 
 clonePrimArrayShim :: Prim a => PrimArray a -> Int -> Int -> PrimArray a
-clonePrimArrayShim !arr !off !len = runST $ do
+clonePrimArrayShim !arr !off !len = runPrimArrayST $ do
   marr <- newPrimArray len
   copyPrimArray marr 0 arr off len
   unsafeFreezePrimArray marr
