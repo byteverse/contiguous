@@ -309,15 +309,15 @@ class Contiguous (arr :: Type -> Type) where
     -> m ()
   -- | Clone a slice of an array.
   clone :: Element arr b
-    => arr b
-    -> Int
-    -> Int
+    => arr b -- ^ Array to copy a slice of
+    -> Int -- ^ Offset into the array
+    -> Int -- ^ Length of the slice
     -> arr b
   -- | Clone a slice of a mutable array.
   cloneMutable :: (PrimMonad m, Element arr b)
-    => Mutable arr (PrimState m) b
-    -> Int
-    -> Int
+    => Mutable arr (PrimState m) b -- ^ Array to copy a slice of
+    -> Int -- ^ Offset into the array
+    -> Int -- ^ Length of the slice
     -> m (Mutable arr (PrimState m) b)
   -- | Test the two arrays for equality.
   equals :: (Element arr b, Eq b) => arr b -> arr b -> Bool
