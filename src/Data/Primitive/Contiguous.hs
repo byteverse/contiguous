@@ -1,14 +1,12 @@
-{-# language
-        BangPatterns
-      , FlexibleInstances
-      , LambdaCase
-      , MagicHash
-      , RankNTypes
-      , ScopedTypeVariables
-      , TypeFamilies
-      , TypeFamilyDependencies
-      , UnboxedTuples
-  #-}
+{-# language BangPatterns #-}
+{-# language FlexibleInstances #-}
+{-# language LambdaCase #-}
+{-# language MagicHash #-}
+{-# language RankNTypes #-}
+{-# language ScopedTypeVariables #-}
+{-# language TypeFamilies #-}
+{-# language TypeFamilyDependencies #-}
+{-# language UnboxedTuples #-}
 
 -- | The contiguous typeclass parameterises over a contiguous array type.
 --   This allows us to have a common API to a number of contiguous
@@ -206,26 +204,26 @@ module Data.Primitive.Contiguous
   , MutableUnliftedArray
   ) where
 
-import Prelude hiding (map,all,any,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$),elem,maximum,minimum,mapM,mapM_,sequence,sequence_)
 import Control.Applicative (liftA2)
 import Control.DeepSeq (NFData)
 import Control.Monad (when)
 import Control.Monad.Primitive
 import Control.Monad.ST (runST,ST)
+import Control.Monad.ST.Run (runPrimArrayST,runSmallArrayST,runUnliftedArrayST,runArrayST)
 import Data.Bits (xor)
 import Data.Coerce (coerce)
 import Data.Kind (Type)
 import Data.Primitive hiding (fromList,fromListN)
 import Data.Primitive.Unlifted.Array
 import Data.Primitive.Unlifted.Class (PrimUnlifted)
-import Data.Semigroup (Semigroup,(<>),First(..))
+import Data.Semigroup (First(..))
 import Data.Word (Word8)
 import GHC.Base (build)
 import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#,dataToTag#,Int(..))
-import Control.Monad.ST.Run (runPrimArrayST,runSmallArrayST,runUnliftedArrayST,runArrayST)
+import Prelude hiding (map,all,any,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$),elem,maximum,minimum,mapM,mapM_,sequence,sequence_)
 
-import qualified Control.DeepSeq as DS
 import qualified Control.Applicative as A
+import qualified Control.DeepSeq as DS
 import qualified Prelude
 
 -- | A typeclass that is satisfied by all types. This is used
@@ -286,9 +284,17 @@ class Contiguous (arr :: Type -> Type) where
   --   The mutable array should not be used after this conversion.
   unsafeFreeze :: PrimMonad m => Mutable arr (PrimState m) b -> m (arr b)
   -- | Turn a mutable array into an immutable one with copying, using a slice of the mutable array.
-  freeze :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> Int -> m (arr b)
+  freeze :: (PrimMonad m, Element arr b)
+    => Mutable arr (PrimState m) b
+    -> Int -- ^ offset into the array
+    -> Int -- ^ length of the slice
+    -> m (arr b)
   -- | Copy a slice of an immutable array into a new mutable array.
-  thaw :: (PrimMonad m, Element arr b) => arr b -> Int -> Int -> m (Mutable arr (PrimState m) b)
+  thaw :: (PrimMonad m, Element arr b)
+    => arr b
+    -> Int -- ^ offset into the array
+    -> Int -- ^ length of the slice
+    -> m (Mutable arr (PrimState m) b)
   -- | Copy a slice of an array into a mutable array.
   copy :: (PrimMonad m, Element arr b)
     => Mutable arr (PrimState m) b -- ^ destination array
@@ -1375,7 +1381,7 @@ generate len f = create (generateMutable len f)
 {-# inline generate #-}
 
 -- | Construct an array of the given length by applying
---   the monadic actino to each index.
+--   the monadic action to each index.
 generateM :: (Contiguous arr, Element arr a, Monad m)
   => Int
   -> (Int -> m a)
