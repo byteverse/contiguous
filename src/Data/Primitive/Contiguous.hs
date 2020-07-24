@@ -347,7 +347,7 @@ class Contiguous (arr :: Type -> Type) where
   insertSlicing src off len0 i x = run $ do
     dst <- replicateMutable (len0 + 1) x
     copy dst 0 src off i
-    copy dst (i + 1) src (off + 1) (len0 - i)
+    copy dst (i + 1) src (off + i) (len0 - i)
     unsafeFreeze dst
   {-# inline insertSlicing #-}
   -- | Test the two arrays for equality.
