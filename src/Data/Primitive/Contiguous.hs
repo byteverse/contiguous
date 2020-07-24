@@ -1,14 +1,12 @@
-{-# language
-        BangPatterns
-      , FlexibleInstances
-      , LambdaCase
-      , MagicHash
-      , RankNTypes
-      , ScopedTypeVariables
-      , TypeFamilies
-      , TypeFamilyDependencies
-      , UnboxedTuples
-  #-}
+{-# language BangPatterns #-}
+{-# language FlexibleInstances #-}
+{-# language LambdaCase #-}
+{-# language MagicHash #-}
+{-# language RankNTypes #-}
+{-# language ScopedTypeVariables #-}
+{-# language TypeFamilies #-}
+{-# language TypeFamilyDependencies #-}
+{-# language UnboxedTuples #-}
 
 -- | The contiguous typeclass parameterises over a contiguous array type.
 --   This allows us to have a common API to a number of contiguous
@@ -59,7 +57,13 @@ module Data.Primitive.Contiguous
   , enumFromMutableN
     -- ** Concatenation
   , append
+    -- ** Splitting and Splicing
+  , insertAt
+  , insertSlicing
     -- * Modifying arrays
+  , replaceAt
+  , modifyAt
+  , modifyAtF
     -- ** Permutations
   , reverse
   , reverseMutable
@@ -100,6 +104,7 @@ module Data.Primitive.Contiguous
   , partitionEithers
     -- ** Searching
   , find
+  , findIndex
   , elem
   , maximum
   , minimum
@@ -206,26 +211,27 @@ module Data.Primitive.Contiguous
   , MutableUnliftedArray
   ) where
 
+import Control.Monad.Primitive
+import Data.Primitive hiding (fromList,fromListN)
+import Data.Primitive.Unlifted.Array
 import Prelude hiding (map,all,any,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$),elem,maximum,minimum,mapM,mapM_,sequence,sequence_)
+
 import Control.Applicative (liftA2)
 import Control.DeepSeq (NFData)
 import Control.Monad (when)
-import Control.Monad.Primitive
 import Control.Monad.ST (runST,ST)
+import Control.Monad.ST.Run (runPrimArrayST,runSmallArrayST,runUnliftedArrayST,runArrayST)
 import Data.Bits (xor)
 import Data.Coerce (coerce)
 import Data.Kind (Type)
-import Data.Primitive hiding (fromList,fromListN)
-import Data.Primitive.Unlifted.Array
 import Data.Primitive.Unlifted.Class (PrimUnlifted)
-import Data.Semigroup (Semigroup,(<>),First(..))
+import Data.Semigroup (First(..))
 import Data.Word (Word8)
 import GHC.Base (build)
 import GHC.Exts (MutableArrayArray#,ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#,dataToTag#,Int(..))
-import Control.Monad.ST.Run (runPrimArrayST,runSmallArrayST,runUnliftedArrayST,runArrayST)
 
-import qualified Control.DeepSeq as DS
 import qualified Control.Applicative as A
+import qualified Control.DeepSeq as DS
 import qualified Prelude
 
 -- | A typeclass that is satisfied by all types. This is used
@@ -286,9 +292,17 @@ class Contiguous (arr :: Type -> Type) where
   --   The mutable array should not be used after this conversion.
   unsafeFreeze :: PrimMonad m => Mutable arr (PrimState m) b -> m (arr b)
   -- | Turn a mutable array into an immutable one with copying, using a slice of the mutable array.
-  freeze :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> Int -> m (arr b)
+  freeze :: (PrimMonad m, Element arr b)
+    => Mutable arr (PrimState m) b
+    -> Int -- ^ offset into the array
+    -> Int -- ^ length of the slice
+    -> m (arr b)
   -- | Copy a slice of an immutable array into a new mutable array.
-  thaw :: (PrimMonad m, Element arr b) => arr b -> Int -> Int -> m (Mutable arr (PrimState m) b)
+  thaw :: (PrimMonad m, Element arr b)
+    => arr b
+    -> Int -- ^ offset into the array
+    -> Int -- ^ length of the slice
+    -> m (Mutable arr (PrimState m) b)
   -- | Copy a slice of an array into a mutable array.
   copy :: (PrimMonad m, Element arr b)
     => Mutable arr (PrimState m) b -- ^ destination array
@@ -319,6 +333,23 @@ class Contiguous (arr :: Type -> Type) where
     -> Int -- ^ Offset into the array
     -> Int -- ^ Length of the slice
     -> m (Mutable arr (PrimState m) b)
+  -- | Copy a slice of an array an then insert an element into that array.
+  --
+  -- The default implementation performs a memset which would be unnecessary
+  -- except that the garbage collector might trace the uninitialized array.
+  insertSlicing :: Element arr b
+    => arr b -- ^ array to copy a slice from
+    -> Int -- ^ offset into source array
+    -> Int -- ^ length of the slice
+    -> Int -- ^ index in the output array to insert at
+    -> b -- ^ element to insert
+    -> arr b
+  insertSlicing src off len0 i x = run $ do
+    dst <- replicateMutable (len0 + 1) x
+    copy dst 0 src off i
+    copy dst (i + 1) src (off + i) (len0 - i)
+    unsafeFreeze dst
+  {-# inline insertSlicing #-}
   -- | Test the two arrays for equality.
   equals :: (Element arr b, Eq b) => arr b -> arr b -> Bool
   -- | Test the two mutable arrays for pointer equality.
@@ -464,7 +495,13 @@ instance Contiguous PrimArray where
     writePrimArray m 1 b
     writePrimArray m 2 c
     unsafeFreezePrimArray m
-  run = runPrimArrayST 
+  insertSlicing src off len0 i x = runPrimArrayST $ do
+    dst <- new (len0 + 1)
+    copy dst 0 src off i
+    write dst i x
+    copy dst (i + 1) src (off + i) (len0 - i)
+    unsafeFreeze dst
+  run = runPrimArrayST
   {-# inline empty #-}
   {-# inline null #-}
   {-# inline new #-}
@@ -484,6 +521,7 @@ instance Contiguous PrimArray where
   {-# inline copyMutable #-}
   {-# inline clone #-}
   {-# inline cloneMutable #-}
+  {-# inline insertSlicing #-}
   {-# inline equals #-}
   {-# inline equalsMutable #-}
   {-# inline unlift #-}
@@ -688,6 +726,29 @@ append !a !b = run $ do
   copy m szA b 0 szB
   unsafeFreeze m
 {-# inline append #-}
+
+-- | Insert an element into an array at the given index.
+insertAt :: (Contiguous arr, Element arr a) => arr a -> Int -> a -> arr a
+insertAt src i x = insertSlicing src 0 (size src) i x
+
+-- | Create a copy of an array except the element at the index is replaced with
+--   the given value.
+replaceAt :: (Contiguous arr, Element arr a) => arr a -> Int -> a -> arr a
+replaceAt src i x = create $ do
+  dst <- thaw src 0 (size src)
+  write dst i x
+  pure dst
+{-# inline replaceAt #-}
+
+modifyAt :: (Contiguous arr, Element arr a)
+  => (a -> a) -> arr a -> Int -> arr a
+modifyAt f src i = replaceAt src i $ f (index src i)
+{-# inline modifyAt #-}
+
+modifyAtF :: (Contiguous arr, Element arr a, Functor f)
+  => (a -> f a) -> arr a -> Int -> f (arr a)
+modifyAtF f src i = replaceAt src i <$> f (index src i)
+{-# inline modifyAtF #-}
 
 -- | Map over the elements of an array with the index.
 imap :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (Int -> b -> c) -> arr1 b -> arr2 c
@@ -1375,7 +1436,7 @@ generate len f = create (generateMutable len f)
 {-# inline generate #-}
 
 -- | Construct an array of the given length by applying
---   the monadic actino to each index.
+--   the monadic action to each index.
 generateM :: (Contiguous arr, Element arr a, Monad m)
   => Int
   -> (Int -> m a)
@@ -1814,13 +1875,27 @@ minimumBy f arr =
 
 -- | 'find' takes a predicate and an array, and returns the leftmost
 --   element of the array matching the prediate, or 'Nothing' if there
---   is no such predicate.
+--   is no such element.
 find :: (Contiguous arr, Element arr a)
   => (a -> Bool)
   -> arr a
   -> Maybe a
 find p = coerce . (foldMap (\x -> if p x then Just (First x) else Nothing))
 {-# inline find #-}
+
+-- | 'findIndex' takes a predicate and an array, and returns the index of
+--   the leftmost element of the array matching the prediate, or 'Nothing'
+--   if there is no such element.
+findIndex :: (Contiguous arr, Element arr a)
+  => (a -> Bool)
+  -> arr a
+  -> Maybe Int
+findIndex p xs = loop 0
+  where
+  loop i
+    | i < size xs = if p (index xs i) then Just i else loop (i + 1)
+    | otherwise = Nothing
+{-# inline findIndex #-}
 
 -- | Swap the elements of the mutable array at the given indices.
 swap :: (Contiguous arr, Element arr a, PrimMonad m)
