@@ -4,6 +4,7 @@
 * Add `all` and `any`.
 * Add `run`. Use it internally to accerelate prevent GHC from
   boxing results in `runST`. 
+* Add `quadrupleton`.
 
 0.5.1: [2020.06.30]
 -----------------
