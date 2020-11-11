@@ -32,6 +32,7 @@ module Data.Primitive.Contiguous
   , singleton
   , doubleton
   , tripleton
+  , quadrupleton
   , replicate
   , replicateMutable
   , generate
@@ -365,6 +366,8 @@ class Contiguous (arr :: Type -> Type) where
   doubleton :: Element arr a => a -> a -> arr a
   -- | Create a tripleton array.
   tripleton :: Element arr a => a -> a -> a -> arr a
+  -- | Create a quadrupleton array.
+  quadrupleton :: Element arr a => a -> a -> a -> a -> arr a
   -- | Reduce the array and all of its elements to WHNF.
   rnf :: (NFData a, Element arr a) => arr a -> ()
   -- | Run an effectful computation that produces an array.
@@ -404,6 +407,13 @@ instance Contiguous SmallArray where
     writeSmallArray m 0 a
     writeSmallArray m 1 b
     writeSmallArray m 2 c
+    unsafeFreezeSmallArray m
+  quadrupleton a b c d = runST $ do
+    m <- newSmallArray 4 errorThunk
+    writeSmallArray m 0 a
+    writeSmallArray m 1 b
+    writeSmallArray m 2 c
+    writeSmallArray m 3 d
     unsafeFreezeSmallArray m
   rnf !ary =
     let !sz = sizeofSmallArray ary
@@ -448,6 +458,7 @@ instance Contiguous SmallArray where
   {-# inline singleton #-}
   {-# inline doubleton #-}
   {-# inline tripleton #-}
+  {-# inline quadrupleton #-}
   {-# inline rnf #-}
   {-# inline run #-}
 
@@ -495,6 +506,13 @@ instance Contiguous PrimArray where
     writePrimArray m 1 b
     writePrimArray m 2 c
     unsafeFreezePrimArray m
+  quadrupleton a b c d = runPrimArrayST $ do
+    m <- newPrimArray 4
+    writePrimArray m 0 a
+    writePrimArray m 1 b
+    writePrimArray m 2 c
+    writePrimArray m 3 d
+    unsafeFreezePrimArray m
   insertSlicing src off len0 i x = runPrimArrayST $ do
     dst <- new (len0 + 1)
     copy dst 0 src off i
@@ -529,6 +547,7 @@ instance Contiguous PrimArray where
   {-# inline singleton #-}
   {-# inline doubleton #-}
   {-# inline tripleton #-}
+  {-# inline quadrupleton #-}
   {-# inline rnf #-}
   {-# inline run #-}
 
@@ -578,6 +597,12 @@ instance Contiguous Array where
     writeArray m 1 b
     writeArray m 2 c
     unsafeFreezeArray m
+  quadrupleton a b c d = runArrayST $ do
+    m <- newArray 4 a
+    writeArray m 1 b
+    writeArray m 2 c
+    writeArray m 3 d
+    unsafeFreezeArray m
   run = runArrayST
   {-# inline empty #-}
   {-# inline null #-}
@@ -605,6 +630,7 @@ instance Contiguous Array where
   {-# inline singleton #-}
   {-# inline doubleton #-}
   {-# inline tripleton #-}
+  {-# inline quadrupleton #-}
   {-# inline rnf #-}
   {-# inline run #-}
 
@@ -654,6 +680,12 @@ instance Contiguous UnliftedArray where
     writeUnliftedArray m 1 b
     writeUnliftedArray m 2 c
     unsafeFreezeUnliftedArray m
+  quadrupleton a b c d = runUnliftedArrayST $ do
+    m <- newUnliftedArray 4 a
+    writeUnliftedArray m 1 b
+    writeUnliftedArray m 2 c
+    writeUnliftedArray m 3 d
+    unsafeFreezeUnliftedArray m
   run = runUnliftedArrayST
   {-# inline empty #-}
   {-# inline null #-}
@@ -681,6 +713,7 @@ instance Contiguous UnliftedArray where
   {-# inline singleton #-}
   {-# inline doubleton #-}
   {-# inline tripleton #-}
+  {-# inline quadrupleton #-}
   {-# inline rnf #-}
   {-# inline run #-}
 
