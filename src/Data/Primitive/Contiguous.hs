@@ -135,6 +135,8 @@ module Data.Primitive.Contiguous
     -- ** Zipping Folds
   , foldrZipWith
   , ifoldrZipWith
+  , foldlZipWithM'
+  , ifoldlZipWithM'
 
     -- * Traversals
   , traverse
@@ -2230,6 +2232,22 @@ foldrZipWith ::
 foldrZipWith f = ifoldrZipWith (\_ x y c -> f x y c)
 {-# inline foldrZipWith #-}
 
+-- | Variant of 'zipWith' that accepts an accumulator, performing a strict
+-- left monadic fold over both arrays.
+foldlZipWithM' ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  , Monad m
+  ) => (c -> a -> b -> m c)
+    -> c
+    -> arr1 a
+    -> arr2 b
+    -> m c
+foldlZipWithM' f = ifoldlZipWithM' (\_ x y c -> f x y c)
+{-# inline foldlZipWithM' #-}
+
 -- | Variant of 'foldrZipWith' that provides the index of each pair of elements.
 ifoldrZipWith ::
   ( Contiguous arr1
@@ -2250,6 +2268,30 @@ ifoldrZipWith f z = \arr1 arr2 ->
         else z
   in go 0
 {-# inline ifoldrZipWith #-}
+
+-- | Variant of 'foldlZipWithM\'' that provides the index of each pair of elements.
+ifoldlZipWithM' ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  , Monad m
+  ) => (Int -> c -> a -> b -> m c)
+    -> c
+    -> arr1 a
+    -> arr2 b
+    -> m c
+ifoldlZipWithM' f z = \arr1 arr2 ->
+  let !sz = min (size arr1) (size arr2)
+      go !ix !acc = if sz > ix
+        then case index# arr1 ix of
+          (# x #) -> case index# arr2 ix of
+            (# y #) -> do
+              acc' <- f ix acc x y
+              go (ix + 1) acc'
+        else pure acc
+  in go 0 z
+{-# inline ifoldlZipWithM' #-}
 
 -- | 'zip' takes two arrays and returns an array of
 --   corresponding pairs.

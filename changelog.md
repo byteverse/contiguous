@@ -1,6 +1,7 @@
 0.5.2: [2020.XX.XX]
 -------------------
 * Add `foldrZipWith` and `ifoldrZipWith`.
+* Add `foldlZipWithM'` and `ifoldlZipWithM'`.
 * Add `all` and `any`.
 * Add `run`. Use it internally to accerelate prevent GHC from
   boxing results in `runST`. 
