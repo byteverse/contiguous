@@ -169,6 +169,9 @@ module Data.Primitive.Contiguous
   --, postscanl
   --, ipostscanl
 
+  , mapAccum'
+  , mapAccumLM'
+
     -- * Conversions
     -- ** Lists
   , fromList
@@ -1370,6 +1373,49 @@ for_ :: (Contiguous arr, Element arr a, Applicative f)
   -> f ()
 for_ = flip traverse_
 {-# inline for_ #-}
+
+-- | Monadic accumulating strict left fold over the elements on an
+-- array.
+mapAccumLM' ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 b
+  , Element arr2 c
+  , Monad m
+  ) => (a -> b -> m (a, c)) -> a -> arr1 b -> m (a, arr2 c)
+{-# inline mapAccumLM' #-}
+mapAccumLM' f a0 src = go 0 [] a0 where
+  !sz = size src
+  go !ix !xs !acc = if ix < sz
+    then do
+      (!acc',!x) <- f acc (index src ix)
+      go (ix + 1) (x : xs) acc'
+    else
+      let !xs' = unsafeFromListReverseN sz xs
+       in pure (acc,xs')
+
+mapAccum' :: forall arr1 arr2 a b c.
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 b
+  , Element arr2 c
+  , Monoid a
+  ) => (b -> (a, c)) -> arr1 b -> (a, arr2 c)
+{-# inline mapAccum' #-}
+mapAccum' f !src = runST $ do
+  dst <- new sz
+  acc <- go 0 dst mempty
+  dst' <- unsafeFreeze dst
+  pure (acc,dst')
+  where
+  !sz = size src
+  go :: Int -> Mutable arr2 s c -> a -> ST s a
+  go !ix !dst !accA = if ix < sz
+    then do
+      let (!accB,!x) = f (index src ix)
+      write dst ix x
+      go (ix + 1) dst (accA <> accB)
+    else pure accA
 
 -- | Map each element of a structure to a monadic action,
 --   evaluate these actions from left to right, and collect
