@@ -1,5 +1,6 @@
 0.5.2: [2020.XX.XX]
 -------------------
+* Add `ifoldlM'`.
 * Add `foldrZipWith` and `ifoldrZipWith`.
 * Add `foldlZipWithM'` and `ifoldlZipWithM'`.
 * Add `all` and `any`.
