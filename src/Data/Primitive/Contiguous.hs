@@ -129,6 +129,7 @@ module Data.Primitive.Contiguous
   , ifoldlMap'
   , ifoldlMap1'
   , foldlM'
+  , ifoldlM'
   , asum
   , all
   , any
@@ -997,6 +998,19 @@ foldlM' f z0 = \arr ->
         else pure acc1
   in go 0 z0
 {-# inline foldlM' #-}
+
+-- | Strict left monadic fold over the elements of an array.
+ifoldlM' :: (Contiguous arr, Element arr a, Monad m) => (b -> Int -> a -> m b) -> b -> arr a -> m b
+ifoldlM' f z0 = \arr ->
+  let !sz = size arr
+      go !ix !acc1 = if ix < sz
+        then do
+          let (# x #) = index# arr ix
+          acc2 <- f acc1 ix x
+          go (ix + 1) acc2
+        else pure acc1
+  in go 0 z0
+{-# inline ifoldlM' #-}
 
 -- | Drop elements that do not satisfy the predicate.
 filter :: (Contiguous arr, Element arr a)
