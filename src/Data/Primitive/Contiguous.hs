@@ -1067,7 +1067,7 @@ mapMaybe :: forall arr1 arr2 a b. (Contiguous arr1, Element arr1 a, Contiguous a
 mapMaybe f arr = run $ do
   let !sz = size arr
   let go :: Int -> Int -> [b] -> ST s ([b],Int)
-      go !ix !numJusts justs = if ix < sz
+      go !ix !numJusts !justs = if ix < sz
         then do
           atIx <- indexM arr ix
           case f atIx of
