@@ -64,7 +64,9 @@ module Data.Primitive.Contiguous
     -- * Modifying arrays
   , replaceAt
   , modifyAt
+  , modifyAt'
   , modifyAtF
+  , modifyAtF'
     -- ** Permutations
   , reverse
   , reverseMutable
@@ -784,10 +786,27 @@ modifyAt :: (Contiguous arr, Element arr a)
 modifyAt f src i = replaceAt src i $ f (index src i)
 {-# inline modifyAt #-}
 
+-- | Variant of modifyAt that forces the result before installing it in the
+-- array.
+modifyAt' :: (Contiguous arr, Element arr a)
+  => (a -> a) -> arr a -> Int -> arr a
+modifyAt' f src i = replaceAt src i $! f (index src i)
+{-# inline modifyAt' #-}
+
 modifyAtF :: (Contiguous arr, Element arr a, Functor f)
   => (a -> f a) -> arr a -> Int -> f (arr a)
 modifyAtF f src i = replaceAt src i <$> f (index src i)
 {-# inline modifyAtF #-}
+
+-- | Variant of modifyAtF that forces the result before installing it in the
+-- array. Note that this requires 'Monad' rather than 'Functor'.
+modifyAtF' :: (Contiguous arr, Element arr a, Monad f)
+  => (a -> f a) -> arr a -> Int -> f (arr a)
+modifyAtF' f src i = do
+  !r <- f (index src i)
+  let !dst = replaceAt src i r
+  pure dst
+{-# inline modifyAtF' #-}
 
 -- | Map over the elements of an array with the index.
 imap :: (Contiguous arr1, Element arr1 b, Contiguous arr2, Element arr2 c) => (Int -> b -> c) -> arr1 b -> arr2 c
