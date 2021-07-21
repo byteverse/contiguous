@@ -1498,10 +1498,10 @@ forM = flip mapM
 -- | 'forM_' is 'mapM_' with its arguments flipped. For a version that
 --   doesn't ignore its results, see 'forM'.
 forM_ :: (Contiguous arr, Element arr a, Element arr b, Applicative f)
-  => (a -> f b)
-  -> arr a
+  => arr a
+  -> (a -> f b)
   -> f ()
-forM_ = traverse_
+forM_ = flip traverse_
 {-# inline forM_ #-}
 
 -- | Evaluate each action in the structure from left to right
