@@ -1111,13 +1111,6 @@ catMaybes :: (Contiguous arr, Element arr a, Element arr (Maybe a))
 catMaybes = mapMaybe id
 {-# inline catMaybes #-}
 
-thawPrimArray :: (PrimMonad m, Prim a) => PrimArray a -> Int -> Int -> m (MutablePrimArray (PrimState m) a)
-thawPrimArray !arr !off !len = do
-  marr <- newPrimArray len
-  copyPrimArray marr 0 arr off len
-  pure marr
-{-# inline thawPrimArray #-}
-
 clonePrimArrayShim :: Prim a => PrimArray a -> Int -> Int -> PrimArray a
 clonePrimArrayShim !arr !off !len = runPrimArrayST $ do
   marr <- newPrimArray len
