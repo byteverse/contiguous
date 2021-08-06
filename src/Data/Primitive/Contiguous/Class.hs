@@ -1,13 +1,17 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE UnboxedTuples #-}
 
 module Data.Primitive.Contiguous.Class
-  ( Contiguous(..)
+  ( ContiguousSlice(..)
+  , Slice(..)
+  , MutableSlice(..)
+  , Contiguous(..)
   , Always
   ) where
 
@@ -28,22 +32,49 @@ import Control.Monad.Primitive (PrimState, PrimMonad(..))
 
 import qualified Control.DeepSeq as DS
 
+data Slice arr a = Slice
+  { offset :: {-# UNPACK #-} !Int
+  , length :: {-# UNPACK #-} !Int
+  , base :: arr a
+  }
 
--- | The 'Contiguous' typeclass as an interface to a multitude of
+data MutableSlice arr s a = MutableSlice
+  { offsetMut :: {-# UNPACK #-} !Int
+  , lengthMut :: {-# UNPACK #-} !Int
+  , baseMut :: !(Mutable arr s a)
+  }
+
+-- | The 'ContiguousSlice' typeclass as an interface to a multitude of
 --   contiguous structures.
-class Contiguous (arr :: Type -> Type) where
+class ContiguousSlice (arr :: Type -> Type) where
   -- | The Mutable counterpart to the array.
   type family Mutable arr = (r :: Type -> Type -> Type) | r -> arr
   -- | The constraint needed to store elements in the array.
   type family Element arr :: Type -> Constraint
-  -- | The empty array.
-  empty :: arr a
-  -- | Test whether the array is empty.
-  null :: arr b -> Bool
+
+  type family Sliced arr :: Type -> Type
+  type family Unsliced arr :: Type -> Type
+
+
+  ------ Construction ------
   -- | Allocate a new mutable array of the given size.
   new :: (PrimMonad m, Element arr b) => Int -> m (Mutable arr (PrimState m) b)
-  -- | @'replicateMutable' n x@ is a mutable array of length @n@ with @x@ the value of every element.
-  replicateMutable :: (PrimMonad m, Element arr b) => Int -> b -> m (Mutable arr (PrimState m) b)
+  -- | @'replicateMutable' n x@ is a mutable array of length @n@ with @x@ the
+  -- value of every element.
+  replicateMutable :: (PrimMonad m, Element arr b)
+                   => Int -> b -> m (Mutable arr (PrimState m) b)
+  -- | The empty array.
+  empty :: arr a
+  -- | Create a singleton array.
+  singleton :: Element arr a => a -> arr a
+  -- | Create a doubleton array.
+  doubleton :: Element arr a => a -> a -> arr a
+  -- | Create a tripleton array.
+  tripleton :: Element arr a => a -> a -> a -> arr a
+  -- | Create a quadrupleton array.
+  quadrupleton :: Element arr a => a -> a -> a -> a -> arr a
+
+  ------ Access and Update ------
   -- | Index into an array at the given index.
   index :: Element arr b => arr b -> Int -> b
   -- | Index into an array at the given index, yielding an unboxed one-tuple of the element.
@@ -69,18 +100,27 @@ class Contiguous (arr :: Type -> Type) where
   --   (but /not/ the elements) is evaluated eagerly.
   indexM :: (Element arr b, Monad m) => arr b -> Int -> m b
   -- | Read a mutable array at the given index.
-  read :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> m b
+  read :: (PrimMonad m, Element arr b)
+       => Mutable arr (PrimState m) b -> Int -> m b
   -- | Write to a mutable array at the given index.
-  write :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> b -> m ()
-  -- | Resize an array into one with the given size.
-  resize :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> Int -> m (Mutable arr (PrimState m) b)
+  write :: (PrimMonad m, Element arr b)
+        => Mutable arr (PrimState m) b -> Int -> b -> m ()
+
+  ------ Properties ------
+  -- | Test whether the array is empty.
+  null :: arr b -> Bool
   -- | The size of the array
   size :: Element arr b => arr b -> Int
   -- | The size of the mutable array
-  sizeMutable :: (PrimMonad m, Element arr b) => Mutable arr (PrimState m) b -> m Int
-  -- | Turn a mutable array into an immutable one without copying.
-  --   The mutable array should not be used after this conversion.
-  unsafeFreeze :: PrimMonad m => Mutable arr (PrimState m) b -> m (arr b)
+  sizeMutable :: (PrimMonad m, Element arr b)
+              => Mutable arr (PrimState m) b -> m Int
+  -- | Test the two arrays for equality.
+  equals :: (Element arr b, Eq b) => arr b -> arr b -> Bool
+  -- | Test the two mutable arrays for pointer equality.
+  --   Does not check equality of elements.
+  equalsMutable :: Mutable arr s a -> Mutable arr s a -> Bool
+
+  ------ Conversion ------
   -- | Turn a mutable array into an immutable one with copying, using a slice of the mutable array.
   freeze :: (PrimMonad m, Element arr b)
     => Mutable arr (PrimState m) b
@@ -93,6 +133,20 @@ class Contiguous (arr :: Type -> Type) where
     -> Int -- ^ offset into the array
     -> Int -- ^ length of the slice
     -> m (Mutable arr (PrimState m) b)
+  -- | Clone a slice of an array.
+  clone :: Element arr b
+    => arr b -- ^ Array to copy a slice of
+    -> Int -- ^ Offset into the array
+    -> Int -- ^ Length of the slice
+    -> arr b
+  -- | Clone a slice of a mutable array.
+  cloneMutable :: (PrimMonad m, Element arr b)
+    => Mutable arr (PrimState m) b -- ^ Array to copy a slice of
+    -> Int -- ^ Offset into the array
+    -> Int -- ^ Length of the slice
+    -> m (Mutable arr (PrimState m) b)
+
+  ------ Copy Operations ------
   -- | Copy a slice of an array into a mutable array.
   copy :: (PrimMonad m, Element arr b)
     => Mutable arr (PrimState m) b -- ^ destination array
@@ -111,19 +165,7 @@ class Contiguous (arr :: Type -> Type) where
     -> Int -- ^ offset into source array
     -> Int -- ^ number of elements to copy
     -> m ()
-  -- | Clone a slice of an array.
-  clone :: Element arr b
-    => arr b -- ^ Array to copy a slice of
-    -> Int -- ^ Offset into the array
-    -> Int -- ^ Length of the slice
-    -> arr b
-  -- | Clone a slice of a mutable array.
-  cloneMutable :: (PrimMonad m, Element arr b)
-    => Mutable arr (PrimState m) b -- ^ Array to copy a slice of
-    -> Int -- ^ Offset into the array
-    -> Int -- ^ Length of the slice
-    -> m (Mutable arr (PrimState m) b)
-  -- | Copy a slice of an array an then insert an element into that array.
+  -- | Copy a slice of an array and then insert an element into that array.
   --
   -- The default implementation performs a memset which would be unnecessary
   -- except that the garbage collector might trace the uninitialized array.
@@ -134,43 +176,62 @@ class Contiguous (arr :: Type -> Type) where
     -> Int -- ^ index in the output array to insert at
     -> b -- ^ element to insert
     -> arr b
-  insertSlicing src off len0 i x = run $ do
-    dst <- replicateMutable (len0 + 1) x
-    copy dst 0 src off i
-    copy dst (i + 1) src (off + i) (len0 - i)
-    unsafeFreeze dst
+  -- FIXME
+  insertSlicing = undefined
+  -- insertSlicing src off len0 i x = run $ do
+  --   dst <- replicateMutable (len0 + 1) x
+  --   copy dst 0 src off i
+  --   copy dst (i + 1) src (off + i) (len0 - i)
+  --   unsafeFreeze dst
   {-# inline insertSlicing #-}
-  -- | Test the two arrays for equality.
-  equals :: (Element arr b, Eq b) => arr b -> arr b -> Bool
-  -- | Test the two mutable arrays for pointer equality.
-  --   Does not check equality of elements.
-  equalsMutable :: Mutable arr s a -> Mutable arr s a -> Bool
-  -- | Unlift an array into an 'ArrayArray#'.
-  unlift :: arr b -> ArrayArray#
-  -- | Lift an 'ArrayArray#' into an array.
-  lift :: ArrayArray# -> arr b
-  -- | Create a singleton array.
-  singleton :: Element arr a => a -> arr a
-  -- | Create a doubleton array.
-  doubleton :: Element arr a => a -> a -> arr a
-  -- | Create a tripleton array.
-  tripleton :: Element arr a => a -> a -> a -> arr a
-  -- | Create a quadrupleton array.
-  quadrupleton :: Element arr a => a -> a -> a -> a -> arr a
+
+  ------ Reduction ------
   -- | Reduce the array and all of its elements to WHNF.
   rnf :: (NFData a, Element arr a) => arr a -> ()
   -- | Run an effectful computation that produces an array.
   run :: (forall s. ST s (arr a)) -> arr a
 
+class (ContiguousSlice arr) => Contiguous arr where
+  -- | Resize an array into one with the given size.
+  resize :: (PrimMonad m, Element arr b)
+         => Mutable arr (PrimState m) b
+         -> Int
+         -> m (Mutable arr (PrimState m) b)
+  -- | Turn a mutable array into an immutable one without copying.
+  --   The mutable array should not be used after this conversion.
+  unsafeFreeze :: PrimMonad m => Mutable arr (PrimState m) b -> m (arr b)
+  -- | Unlift an array into an 'ArrayArray#'.
+  unlift :: arr b -> ArrayArray#
+  -- | Lift an 'ArrayArray#' into an array.
+  lift :: ArrayArray# -> arr b
+
+
 -- | A typeclass that is satisfied by all types. This is used
 -- used to provide a fake constraint for 'Array' and 'SmallArray'.
-class Always a
-instance Always a
+class Always a where {}
+instance Always a where {}
+
+-- FIXME delete fromMutableArray
+fromMutableArray :: (PrimMonad m, ContiguousSlice arr, Element arr a)
+  => Mutable arr (PrimState m) a -> m (MutableSlice arr (PrimState m) a)
+{-# INLINE fromMutableArray #-}
+fromMutableArray baseMut = do
+  lengthMut <- sizeMutable baseMut
+  pure MutableSlice{offsetMut=0,lengthMut,baseMut}
+
+instance (ContiguousSlice arr) => ContiguousSlice (Slice arr) where
+  type Mutable (Slice arr) = MutableSlice arr
+  type Element (Slice arr) = Element arr
+  type Sliced (Slice arr) = Slice arr
+  type Unsliced (Slice arr) = arr
+  new len = fromMutableArray =<< new len
 
 
-instance Contiguous SmallArray where
+instance ContiguousSlice SmallArray where
   type Mutable SmallArray = SmallMutableArray
   type Element SmallArray = Always
+  type Sliced SmallArray = Slice SmallArray
+  type Unsliced SmallArray = SmallArray
   empty = mempty
   new n = newSmallArray n errorThunk
   index = indexSmallArray
@@ -184,7 +245,6 @@ instance Contiguous SmallArray where
   freeze = freezeSmallArray
   size = sizeofSmallArray
   sizeMutable = (\x -> pure $! sizeofSmallMutableArray x)
-  unsafeFreeze = unsafeFreezeSmallArray
   thaw = thawSmallArray
   equals = (==)
   equalsMutable = (==)
@@ -220,12 +280,9 @@ instance Contiguous SmallArray where
      in go 0
   clone = cloneSmallArray
   cloneMutable = cloneSmallMutableArray
-  lift x = SmallArray (unsafeCoerce# x)
-  unlift (SmallArray x) = unsafeCoerce# x
   copy = copySmallArray
   copyMutable = copySmallMutableArray
   replicateMutable = replicateSmallMutableArray
-  resize = resizeSmallArray
   run = runSmallArrayST
   {-# inline empty #-}
   {-# inline null #-}
@@ -236,10 +293,8 @@ instance Contiguous SmallArray where
   {-# inline indexM #-}
   {-# inline read #-}
   {-# inline write #-}
-  {-# inline resize #-}
   {-# inline size #-}
   {-# inline sizeMutable #-}
-  {-# inline unsafeFreeze #-}
   {-# inline freeze #-}
   {-# inline thaw #-}
   {-# inline copy #-}
@@ -248,8 +303,6 @@ instance Contiguous SmallArray where
   {-# inline cloneMutable #-}
   {-# inline equals #-}
   {-# inline equalsMutable #-}
-  {-# inline unlift #-}
-  {-# inline lift #-}
   {-# inline singleton #-}
   {-# inline doubleton #-}
   {-# inline tripleton #-}
@@ -257,9 +310,21 @@ instance Contiguous SmallArray where
   {-# inline rnf #-}
   {-# inline run #-}
 
-instance Contiguous PrimArray where
+instance Contiguous SmallArray where
+  resize = resizeSmallArray
+  unsafeFreeze = unsafeFreezeSmallArray
+  unlift (SmallArray x) = unsafeCoerce# x
+  lift x = SmallArray (unsafeCoerce# x)
+  {-# inline resize #-}
+  {-# inline unsafeFreeze #-}
+  {-# inline unlift #-}
+  {-# inline lift #-}
+
+instance ContiguousSlice PrimArray where
   type Mutable PrimArray = MutablePrimArray
   type Element PrimArray = Prim
+  type Sliced PrimArray = Slice PrimArray
+  type Unsliced PrimArray = PrimArray
   empty = mempty
   new = newPrimArray
   replicateMutable = replicateMutablePrimArray
@@ -268,19 +333,15 @@ instance Contiguous PrimArray where
   indexM arr ix = pure (indexPrimArray arr ix)
   read = readPrimArray
   write = writePrimArray
-  resize = resizeMutablePrimArray
   size = sizeofPrimArray
   sizeMutable = getSizeofMutablePrimArray
   freeze = freezePrimArrayShim
-  unsafeFreeze = unsafeFreezePrimArray
   thaw = thawPrimArray
   copy = copyPrimArray
   copyMutable = copyMutablePrimArray
   clone = clonePrimArrayShim
   cloneMutable = cloneMutablePrimArrayShim
   equals = (==)
-  unlift (PrimArray x) = unsafeCoerce# x
-  lift x = PrimArray (unsafeCoerce# x)
   null (PrimArray a) = case sizeofByteArray# a of
     0# -> True
     _ -> False
@@ -324,10 +385,8 @@ instance Contiguous PrimArray where
   {-# inline indexM #-}
   {-# inline read #-}
   {-# inline write #-}
-  {-# inline resize #-}
   {-# inline size #-}
   {-# inline sizeMutable #-}
-  {-# inline unsafeFreeze #-}
   {-# inline freeze #-}
   {-# inline thaw #-}
   {-# inline copy #-}
@@ -337,8 +396,6 @@ instance Contiguous PrimArray where
   {-# inline insertSlicing #-}
   {-# inline equals #-}
   {-# inline equalsMutable #-}
-  {-# inline unlift #-}
-  {-# inline lift #-}
   {-# inline singleton #-}
   {-# inline doubleton #-}
   {-# inline tripleton #-}
@@ -346,9 +403,21 @@ instance Contiguous PrimArray where
   {-# inline rnf #-}
   {-# inline run #-}
 
-instance Contiguous Array where
+instance Contiguous PrimArray where
+  resize = resizeMutablePrimArray
+  unsafeFreeze = unsafeFreezePrimArray
+  unlift (PrimArray x) = unsafeCoerce# x
+  lift x = PrimArray (unsafeCoerce# x)
+  {-# inline resize #-}
+  {-# inline unsafeFreeze #-}
+  {-# inline unlift #-}
+  {-# inline lift #-}
+
+instance ContiguousSlice Array where
   type Mutable Array = MutableArray
   type Element Array = Always
+  type Sliced Array = Slice Array
+  type Unsliced Array = Array
   empty = mempty
   new n = newArray n errorThunk
   replicateMutable = newArray
@@ -357,19 +426,15 @@ instance Contiguous Array where
   indexM = indexArrayM
   read = readArray
   write = writeArray
-  resize = resizeArray
   size = sizeofArray
   sizeMutable = (\x -> pure $! sizeofMutableArray x)
   freeze = freezeArray
-  unsafeFreeze = unsafeFreezeArray
   thaw = thawArray
   copy = copyArray
   copyMutable = copyMutableArray
   clone = cloneArray
   cloneMutable = cloneMutableArray
   equals = (==)
-  unlift (Array x) = unsafeCoerce# x
-  lift x = Array (unsafeCoerce# x)
   null (Array a) = case sizeofArray# a of
     0# -> True
     _ -> False
@@ -408,10 +473,8 @@ instance Contiguous Array where
   {-# inline indexM #-}
   {-# inline read #-}
   {-# inline write #-}
-  {-# inline resize #-}
   {-# inline size #-}
   {-# inline sizeMutable #-}
-  {-# inline unsafeFreeze #-}
   {-# inline freeze #-}
   {-# inline thaw #-}
   {-# inline copy #-}
@@ -420,8 +483,6 @@ instance Contiguous Array where
   {-# inline cloneMutable #-}
   {-# inline equals #-}
   {-# inline equalsMutable #-}
-  {-# inline unlift #-}
-  {-# inline lift #-}
   {-# inline singleton #-}
   {-# inline doubleton #-}
   {-# inline tripleton #-}
@@ -429,9 +490,21 @@ instance Contiguous Array where
   {-# inline rnf #-}
   {-# inline run #-}
 
-instance Contiguous UnliftedArray where
+instance Contiguous Array where
+  resize = resizeArray
+  unsafeFreeze = unsafeFreezeArray
+  unlift (Array x) = unsafeCoerce# x
+  lift x = Array (unsafeCoerce# x)
+  {-# inline resize #-}
+  {-# inline unsafeFreeze #-}
+  {-# inline unlift #-}
+  {-# inline lift #-}
+
+instance ContiguousSlice UnliftedArray where
   type Mutable UnliftedArray = MutableUnliftedArray
   type Element UnliftedArray = PrimUnlifted
+  type Sliced UnliftedArray = Slice UnliftedArray
+  type Unsliced UnliftedArray = UnliftedArray
   empty = emptyUnliftedArray
   new = unsafeNewUnliftedArray
   replicateMutable = newUnliftedArray
@@ -440,19 +513,15 @@ instance Contiguous UnliftedArray where
   indexM arr ix = pure (indexUnliftedArray arr ix)
   read = readUnliftedArray
   write = writeUnliftedArray
-  resize = resizeUnliftedArray
   size = sizeofUnliftedArray
   sizeMutable = pure . sizeofMutableUnliftedArray
   freeze = freezeUnliftedArray
-  unsafeFreeze = unsafeFreezeUnliftedArray
   thaw = thawUnliftedArray
   copy = copyUnliftedArray
   copyMutable = copyMutableUnliftedArray
   clone = cloneUnliftedArray
   cloneMutable = cloneMutableUnliftedArray
   equals = (==)
-  unlift (UnliftedArray x) = x
-  lift x = UnliftedArray x
   null (UnliftedArray a) = case sizeofArrayArray# a of
     0# -> True
     _ -> False
@@ -491,10 +560,8 @@ instance Contiguous UnliftedArray where
   {-# inline indexM #-}
   {-# inline read #-}
   {-# inline write #-}
-  {-# inline resize #-}
   {-# inline size #-}
   {-# inline sizeMutable #-}
-  {-# inline unsafeFreeze #-}
   {-# inline freeze #-}
   {-# inline thaw #-}
   {-# inline copy #-}
@@ -503,11 +570,20 @@ instance Contiguous UnliftedArray where
   {-# inline cloneMutable #-}
   {-# inline equals #-}
   {-# inline equalsMutable #-}
-  {-# inline unlift #-}
-  {-# inline lift #-}
   {-# inline singleton #-}
   {-# inline doubleton #-}
   {-# inline tripleton #-}
   {-# inline quadrupleton #-}
   {-# inline rnf #-}
   {-# inline run #-}
+
+
+instance Contiguous UnliftedArray where
+  resize = resizeUnliftedArray
+  unsafeFreeze = unsafeFreezeUnliftedArray
+  unlift (UnliftedArray x) = x
+  lift x = UnliftedArray x
+  {-# inline resize #-}
+  {-# inline unsafeFreeze #-}
+  {-# inline unlift #-}
+  {-# inline lift #-}

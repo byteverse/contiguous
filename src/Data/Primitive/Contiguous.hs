@@ -206,7 +206,10 @@ module Data.Primitive.Contiguous
   , rnf
 
     -- * Classes
-  , Contiguous(Mutable,Element)
+  , Contiguous
+  , ContiguousSlice(Mutable,Element,Sliced)
+  , Slice
+  , MutableSlice
   , Always
 
     -- * Re-Exports
@@ -225,12 +228,12 @@ import Data.Primitive hiding (fromList,fromListN)
 import Data.Primitive.Unlifted.Array
 import Prelude hiding (map,all,any,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$),elem,maximum,minimum,mapM,mapM_,sequence,sequence_)
 
-import Data.Primitive.Contiguous.Class (Contiguous(..), Always)
 import Control.Applicative (liftA2)
 import Control.Monad (when)
 import Control.Monad.ST (runST,ST)
 import Data.Bits (xor)
 import Data.Coerce (coerce)
+import Data.Primitive.Contiguous.Class (Contiguous(..), ContiguousSlice(..), Slice, MutableSlice, Always)
 import Data.Semigroup (First(..))
 import Data.Word (Word8)
 import GHC.Base (build)
