@@ -24,7 +24,10 @@ source-repository head
 library
   exposed-modules:
     Data.Primitive.Contiguous
-    Data.Primitive.Contiguous.Slice
+    Data.Primitive.Contiguous.Class
+    -- Data.Primitive.Contiguous.Slice
+  other-modules:
+    Data.Primitive.Contiguous.Shim
   hs-source-dirs: src
   build-depends:
       base >=4.11.1.0 && <5
