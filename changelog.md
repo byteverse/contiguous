@@ -1,4 +1,4 @@
-0.5.2: [2020.XX.XX]
+0.5.2: [2021.08.11]
 -------------------
 * Add `ifoldlM'`.
 * Add `foldrZipWith` and `ifoldrZipWith`.
