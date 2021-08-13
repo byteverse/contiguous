@@ -76,7 +76,7 @@ class ContiguousSlice (arr :: Type -> Type) where
   -- whereas the mutable slice of a mutable slice should be the same slice type.
   --
   -- @since 0.6.0
-  type family SlicedMut arr :: Type -> Type -> Type
+  type family MutableSliced arr :: Type -> Type -> Type
 
 
   ------ Construction ------
@@ -165,7 +165,7 @@ class ContiguousSlice (arr :: Type -> Type) where
     => Mutable arr s a -- base array
     -> Int -- offset
     -> Int -- length
-    -> SlicedMut arr s a
+    -> MutableSliced arr s a
   -- | Create a 'Slice' that covers the entire array.
   --
   -- @since 0.6.0
@@ -175,7 +175,7 @@ class ContiguousSlice (arr :: Type -> Type) where
   -- @since 0.6.0
   toSliceMut :: (PrimMonad m, Element arr a)
     => Mutable arr (PrimState m) a
-    -> m (SlicedMut arr (PrimState m) a)
+    -> m (MutableSliced arr (PrimState m) a)
   -- | Clone a slice of an array.
   clone :: Element arr b
     => Sliced arr b -- ^ slice to copy
@@ -189,12 +189,12 @@ class ContiguousSlice (arr :: Type -> Type) where
   clone_ :: Element arr a => arr a -> Int -> Int -> arr a
   -- | Clone a slice of a mutable array.
   cloneMut :: (PrimMonad m, Element arr b)
-    => SlicedMut arr (PrimState m) b -- ^ Array to copy a slice of
+    => MutableSliced arr (PrimState m) b -- ^ Array to copy a slice of
     -> m (Mutable arr (PrimState m) b)
   default cloneMut ::
-       ( SlicedMut arr ~ MutableSlice arr, Contiguous arr
+       ( MutableSliced arr ~ MutableSlice arr, Contiguous arr
        , PrimMonad m, Element arr b)
-    => SlicedMut arr (PrimState m) b -> m (Mutable arr (PrimState m) b)
+    => MutableSliced arr (PrimState m) b -> m (Mutable arr (PrimState m) b)
   {-# INLINE cloneMut #-}
   cloneMut MutableSlice{offsetMut,lengthMut,baseMut}
     = cloneMut_ (liftMut baseMut) offsetMut lengthMut
@@ -204,12 +204,12 @@ class ContiguousSlice (arr :: Type -> Type) where
     -> Int -- ^ length
     -> m (Mutable arr (PrimState m) b)
   freeze :: (PrimMonad m, Element arr a)
-    => SlicedMut arr (PrimState m) a
+    => MutableSliced arr (PrimState m) a
     -> m (arr a)
   default freeze ::
-       ( SlicedMut arr ~ MutableSlice arr, Contiguous arr
+       ( MutableSliced arr ~ MutableSlice arr, Contiguous arr
        , PrimMonad m, Element arr a)
-    => SlicedMut arr (PrimState m) a -> m (arr a)
+    => MutableSliced arr (PrimState m) a -> m (arr a)
   {-# INLINE freeze #-}
   freeze MutableSlice{offsetMut,lengthMut,baseMut}
     = freeze_ (liftMut baseMut) offsetMut lengthMut
@@ -263,12 +263,12 @@ class ContiguousSlice (arr :: Type -> Type) where
   copyMut :: (PrimMonad m, Element arr b)
     => Mutable arr (PrimState m) b -- ^ destination array
     -> Int -- ^ offset into destination array
-    -> SlicedMut arr (PrimState m) b -- ^ source slice
+    -> MutableSliced arr (PrimState m) b -- ^ source slice
     -> m ()
   default copyMut ::
-       ( SlicedMut arr ~ MutableSlice arr, Contiguous arr
+       ( MutableSliced arr ~ MutableSlice arr, Contiguous arr
        , PrimMonad m, Element arr b)
-    => Mutable arr (PrimState m) b -> Int -> SlicedMut arr (PrimState m) b -> m ()
+    => Mutable arr (PrimState m) b -> Int -> MutableSliced arr (PrimState m) b -> m ()
   {-# INLINE copyMut #-}
   copyMut dst dstOff MutableSlice{offsetMut,lengthMut,baseMut}
     = copyMut_ dst dstOff (liftMut baseMut) offsetMut lengthMut
@@ -336,7 +336,7 @@ instance (Contiguous arr) => ContiguousSlice (Slice arr) where
   type Mutable (Slice arr) = MutableSlice arr
   type Element (Slice arr) = Element arr
   type Sliced (Slice arr) = Slice arr
-  type SlicedMut (Slice arr) = MutableSlice arr
+  type MutableSliced (Slice arr) = MutableSlice arr
   ------ Construction ------
   new len = do
     baseMut <- new len
@@ -472,7 +472,7 @@ instance ContiguousSlice SmallArray where
   type Mutable SmallArray = SmallMutableArray
   type Element SmallArray = Always
   type Sliced SmallArray = Slice SmallArray
-  type SlicedMut SmallArray = MutableSlice SmallArray
+  type MutableSliced SmallArray = MutableSlice SmallArray
   empty = mempty
   new n = newSmallArray n errorThunk
   index = indexSmallArray
@@ -583,7 +583,7 @@ instance ContiguousSlice PrimArray where
   type Mutable PrimArray = MutablePrimArray
   type Element PrimArray = Prim
   type Sliced PrimArray = Slice PrimArray
-  type SlicedMut PrimArray = MutableSlice PrimArray
+  type MutableSliced PrimArray = MutableSlice PrimArray
   empty = mempty
   new = newPrimArray
   replicateMut = replicateMutablePrimArray
@@ -696,7 +696,7 @@ instance ContiguousSlice Array where
   type Mutable Array = MutableArray
   type Element Array = Always
   type Sliced Array = Slice Array
-  type SlicedMut Array = MutableSlice Array
+  type MutableSliced Array = MutableSlice Array
   empty = mempty
   new n = newArray n errorThunk
   replicateMut = newArray
@@ -802,7 +802,7 @@ instance ContiguousSlice UnliftedArray where
   type Mutable UnliftedArray = MutableUnliftedArray
   type Element UnliftedArray = PrimUnlifted
   type Sliced UnliftedArray = Slice UnliftedArray
-  type SlicedMut UnliftedArray = MutableSlice UnliftedArray
+  type MutableSliced UnliftedArray = MutableSlice UnliftedArray
   empty = emptyUnliftedArray
   new = unsafeNewUnliftedArray
   replicateMut = newUnliftedArray

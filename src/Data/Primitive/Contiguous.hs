@@ -216,7 +216,7 @@ module Data.Primitive.Contiguous
 
     -- * Classes
   , Contiguous
-  , ContiguousSlice(Mutable,Element,Sliced,SlicedMut)
+  , ContiguousSlice(Mutable,Element,Sliced,MutableSliced)
   , Always
 
     -- * Re-Exports
