@@ -16,7 +16,7 @@ module Data.Primitive.Contiguous
     -- * Accessors
     -- ** Length Information
     size
-  , sizeMutable
+  , sizeMut
   , null
     -- ** Indexing
   , index
@@ -34,7 +34,7 @@ module Data.Primitive.Contiguous
   , tripleton
   , quadrupleton
   , replicate
-  , replicateMutable
+  , replicateMut
   , generate
   , generateM
   , generateMutable
@@ -44,7 +44,7 @@ module Data.Primitive.Contiguous
     -- ** Running
   , run
     -- ** Monadic initialisation
-  , replicateMutableM
+  , replicateMutM
   , generateMutableM
   , iterateMutableNM
   , create
@@ -61,6 +61,15 @@ module Data.Primitive.Contiguous
     -- ** Splitting and Splicing
   , insertAt
   , insertSlicing
+
+    -- * Slicing
+  , Slice
+  , MutableSlice
+  , slice
+  , sliceMut
+  , toSlice
+  , toSliceMut
+
     -- * Modifying arrays
   , replaceAt
   , modifyAt
@@ -115,7 +124,7 @@ module Data.Primitive.Contiguous
   , minimumBy
     -- ** Comparing for equality
   , equals
-  , equalsMutable
+  , equalsMut
   , same
 
     -- * Folds
@@ -192,9 +201,9 @@ module Data.Primitive.Contiguous
   , unlift
     -- ** Between mutable and immutable variants
   , clone
-  , cloneMutable
+  , cloneMut
   , copy
-  , copyMutable
+  , copyMut
   , freeze
   , thaw
   , unsafeFreeze
@@ -207,9 +216,7 @@ module Data.Primitive.Contiguous
 
     -- * Classes
   , Contiguous
-  , ContiguousSlice(Mutable,Element,Sliced)
-  , Slice
-  , MutableSlice
+  , ContiguousSlice(Mutable,Element,Sliced,SlicedMut)
   , Always
 
     -- * Re-Exports
@@ -246,23 +253,21 @@ import qualified Prelude
 -- | Append two arrays.
 append :: (Contiguous arr, Element arr a) => arr a -> arr a -> arr a
 append !a !b = run $ do
-  let !szA = size a
-  let !szB = size b
-  m <- new (szA + szB)
-  copy m 0 a 0 szA
-  copy m szA b 0 szB
+  m <- new (size a + size b)
+  copy m 0 (toSlice a)
+  copy m (size a) (toSlice b)
   unsafeFreeze m
 {-# inline append #-}
 
 -- | Insert an element into an array at the given index.
 insertAt :: (Contiguous arr, Element arr a) => arr a -> Int -> a -> arr a
-insertAt src i x = insertSlicing src 0 (size src) i x
+insertAt src i x = insertSlicing (toSlice src) i x
 
 -- | Create a copy of an array except the element at the index is replaced with
 --   the given value.
 replaceAt :: (Contiguous arr, Element arr a) => arr a -> Int -> a -> arr a
 replaceAt src i x = create $ do
-  dst <- thaw src 0 (size src)
+  dst <- thaw (toSlice src)
   write dst i x
   pure dst
 {-# inline replaceAt #-}
@@ -611,15 +616,15 @@ catMaybes = mapMaybe id
 
 -- | @'replicate' n x@ is an array of length @n@ with @x@ the value of every element.
 replicate :: (Contiguous arr, Element arr a) => Int -> a -> arr a
-replicate n x = create (replicateMutable n x)
+replicate n x = create (replicateMut n x)
 {-# inline replicate #-}
 
--- | @'replicateMutableM' n act@ performs the action n times, gathering the results.
-replicateMutableM :: (PrimMonad m, Contiguous arr, Element arr a)
+-- | @'replicateMutM' n act@ performs the action n times, gathering the results.
+replicateMutM :: (PrimMonad m, Contiguous arr, Element arr a)
   => Int
   -> m a
   -> m (Mutable arr (PrimState m) a)
-replicateMutableM len act = do
+replicateMutM len act = do
   marr <- new len
   let go !ix = when (ix < len) $ do
         x <- act
@@ -627,7 +632,7 @@ replicateMutableM len act = do
         go (ix + 1)
   go 0
   pure marr
-{-# inline replicateMutableM #-}
+{-# inline replicateMutM #-}
 
 
 -- | Create an array from a list. If the given length does
@@ -685,7 +690,7 @@ mapMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   -> Mutable arr (PrimState m) a
   -> m ()
 mapMutable f !marr = do
-  !sz <- sizeMutable marr
+  !sz <- sizeMut marr
   let go !ix = when (ix < sz) $ do
         a <- read marr ix
         write marr ix (f a)
@@ -699,7 +704,7 @@ mapMutable' :: (PrimMonad m, Contiguous arr, Element arr a)
   -> Mutable arr (PrimState m) a
   -> m ()
 mapMutable' f !marr = do
-  !sz <- sizeMutable marr
+  !sz <- sizeMut marr
   let go !ix = when (ix < sz) $ do
         a <- read marr ix
         let !b = f a
@@ -714,7 +719,7 @@ imapMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   -> Mutable arr (PrimState m) a
   -> m ()
 imapMutable f !marr = do
-  !sz <- sizeMutable marr
+  !sz <- sizeMut marr
   let go !ix = when (ix < sz) $ do
         a <- read marr ix
         write marr ix (f ix a)
@@ -728,7 +733,7 @@ imapMutable' :: (PrimMonad m, Contiguous arr, Element arr a)
   -> Mutable arr (PrimState m) a
   -> m ()
 imapMutable' f !marr = do
-  !sz <- sizeMutable marr
+  !sz <- sizeMut marr
   let go !ix = when (ix < sz) $ do
         a <- read marr ix
         let !b = f ix a
@@ -1206,7 +1211,7 @@ toListMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   => Mutable arr (PrimState m) a
   -> m [a]
 toListMutable marr = do
-  sz <- sizeMutable marr
+  sz <- sizeMut marr
   let go !ix !acc = if ix >= 0
         then do
           x <- read marr ix
@@ -1270,7 +1275,7 @@ modify :: (Contiguous arr, Element arr a, PrimMonad m)
   -> Mutable arr (PrimState m) a
   -> m ()
 modify f marr = do
-  !sz <- sizeMutable marr
+  !sz <- sizeMut marr
   let go !ix = when (ix < sz) $ do
         x <- read marr ix
         write marr ix (f x)
@@ -1284,7 +1289,7 @@ modify' :: (Contiguous arr, Element arr a, PrimMonad m)
   -> Mutable arr (PrimState m) a
   -> m ()
 modify' f marr = do
-  !sz <- sizeMutable marr
+  !sz <- sizeMut marr
   let go !ix = when (ix < sz) $ do
         x <- read marr ix
         let !y = f x
@@ -1339,12 +1344,10 @@ reverse :: (Contiguous arr, Element arr a)
   => arr a
   -> arr a
 reverse arr = run $ do
-  marr <- new sz
-  copy marr 0 arr 0 sz
+  marr <- new (size arr)
+  copy marr 0 (toSlice arr)
   reverseMutable marr
   unsafeFreeze marr
-  where
-    !sz = size arr
 {-# inline reverse #-}
 
 -- | Reverse the elements of a mutable array, in-place.
@@ -1352,7 +1355,7 @@ reverseMutable :: (Contiguous arr, Element arr a, PrimMonad m)
   => Mutable arr (PrimState m) a
   -> m ()
 reverseMutable marr = do
-  !sz <- sizeMutable marr
+  !sz <- sizeMut marr
   reverseSlice marr 0 (sz - 1)
 {-# inline reverseMutable #-}
 
@@ -1864,7 +1867,7 @@ zip = zipWith (,)
   , Element arr1 b
   , Element arr2 a
   ) => a -> arr1 b -> arr2 a
-a <$ barr = create (replicateMutable (size barr) a)
+a <$ barr = create (replicateMut (size barr) a)
 {-# inline (<$) #-}
 
 -- | Sequential application.
