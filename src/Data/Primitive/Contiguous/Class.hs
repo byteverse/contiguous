@@ -25,15 +25,16 @@ import Data.Primitive.Unlifted.Array
 import Prelude hiding (length,map,all,any,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$),elem,maximum,minimum,mapM,mapM_,sequence,sequence_)
 
 
-import GHC.Exts (TYPE,RuntimeRep(UnliftedRep))
-import GHC.Exts (SmallArray#,Array#)
 import Control.DeepSeq (NFData)
+import Control.Monad.Primitive (PrimState, PrimMonad(..))
 import Control.Monad.ST (runST,ST)
 import Control.Monad.ST.Run (runPrimArrayST,runSmallArrayST,runUnliftedArrayST,runArrayST)
 import Data.Kind (Type)
 import Data.Primitive.Unlifted.Class (PrimUnlifted)
-import GHC.Exts (ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#,unsafeCoerce#)
-import Control.Monad.Primitive (PrimState, PrimMonad(..))
+import GHC.Exts (ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#)
+import GHC.Exts (SmallMutableArray#,MutableArray#,MutableArrayArray#)
+import GHC.Exts (SmallArray#,Array#)
+import GHC.Exts (TYPE,RuntimeRep(UnliftedRep))
 
 import qualified Control.DeepSeq as DS
 
@@ -43,7 +44,7 @@ import qualified Control.DeepSeq as DS
 data Slice arr a = Slice
   { offset :: {-# UNPACK #-} !Int
   , length :: {-# UNPACK #-} !Int
-  , base :: Unlifted arr a
+  , base :: !(Unlifted arr a)
   }
 
 -- | Slices of mutable arrays: packages an offset and length with a mutable backing array.
@@ -52,7 +53,7 @@ data Slice arr a = Slice
 data MutableSlice arr s a = MutableSlice
   { offsetMut :: {-# UNPACK #-} !Int
   , lengthMut :: {-# UNPACK #-} !Int
-  , baseMut :: !(Mutable arr s a)
+  , baseMut :: !(UnliftedMut arr s a)
   }
 
 -- | The 'ContiguousSlice' typeclass as an interface to a multitude of
@@ -190,11 +191,13 @@ class ContiguousSlice (arr :: Type -> Type) where
   cloneMut :: (PrimMonad m, Element arr b)
     => SlicedMut arr (PrimState m) b -- ^ Array to copy a slice of
     -> m (Mutable arr (PrimState m) b)
-  default cloneMut :: (SlicedMut arr ~ MutableSlice arr, PrimMonad m, Element arr b)
+  default cloneMut ::
+       ( SlicedMut arr ~ MutableSlice arr, Contiguous arr
+       , PrimMonad m, Element arr b)
     => SlicedMut arr (PrimState m) b -> m (Mutable arr (PrimState m) b)
   {-# INLINE cloneMut #-}
   cloneMut MutableSlice{offsetMut,lengthMut,baseMut}
-    = cloneMut_ baseMut offsetMut lengthMut
+    = cloneMut_ (liftMut baseMut) offsetMut lengthMut
   cloneMut_ :: (PrimMonad m, Element arr b)
     => Mutable arr (PrimState m) b -- ^ Array to copy a slice of
     -> Int -- ^ offset
@@ -203,11 +206,13 @@ class ContiguousSlice (arr :: Type -> Type) where
   freeze :: (PrimMonad m, Element arr a)
     => SlicedMut arr (PrimState m) a
     -> m (arr a)
-  default freeze :: (SlicedMut arr ~ MutableSlice arr, PrimMonad m, Element arr a)
+  default freeze ::
+       ( SlicedMut arr ~ MutableSlice arr, Contiguous arr
+       , PrimMonad m, Element arr a)
     => SlicedMut arr (PrimState m) a -> m (arr a)
   {-# INLINE freeze #-}
   freeze MutableSlice{offsetMut,lengthMut,baseMut}
-    = freeze_ baseMut offsetMut lengthMut
+    = freeze_ (liftMut baseMut) offsetMut lengthMut
   -- | Turn a mutable array into an immutable one with copying, using a slice of
   -- the mutable array.
   freeze_ :: (PrimMonad m, Element arr b)
@@ -260,10 +265,13 @@ class ContiguousSlice (arr :: Type -> Type) where
     -> Int -- ^ offset into destination array
     -> SlicedMut arr (PrimState m) b -- ^ source slice
     -> m ()
-  default copyMut :: (SlicedMut arr ~ MutableSlice arr, PrimMonad m, Element arr b)
+  default copyMut ::
+       ( SlicedMut arr ~ MutableSlice arr, Contiguous arr
+       , PrimMonad m, Element arr b)
     => Mutable arr (PrimState m) b -> Int -> SlicedMut arr (PrimState m) b -> m ()
   {-# INLINE copyMut #-}
-  copyMut dst dstOff MutableSlice{offsetMut,lengthMut,baseMut} = copyMut_ dst dstOff baseMut offsetMut lengthMut
+  copyMut dst dstOff MutableSlice{offsetMut,lengthMut,baseMut}
+    = copyMut_ dst dstOff (liftMut baseMut) offsetMut lengthMut
   copyMut_ :: (PrimMonad m, Element arr b)
     => Mutable arr (PrimState m) b -- ^ destination array
     -> Int -- ^ offset into destination array
@@ -302,6 +310,7 @@ class ContiguousSlice (arr :: Type -> Type) where
 -- @since 0.6.0
 class (ContiguousSlice arr) => Contiguous arr where
   type Unlifted arr = (r :: Type -> TYPE 'UnliftedRep) | r -> arr
+  type UnliftedMut arr = (r :: Type -> Type -> TYPE 'UnliftedRep) | r -> arr
   -- | Resize an array into one with the given size.
   resize :: (PrimMonad m, Element arr b)
          => Mutable arr (PrimState m) b
@@ -312,8 +321,10 @@ class (ContiguousSlice arr) => Contiguous arr where
   unsafeFreeze :: PrimMonad m => Mutable arr (PrimState m) b -> m (arr b)
   -- | Unlift an array into an 'ArrayArray#'.
   unlift :: arr b -> Unlifted arr b
+  unliftMut :: Mutable arr s b -> UnliftedMut arr s b
   -- | Lift an 'ArrayArray#' into an array.
   lift :: Unlifted arr b -> arr b
+  liftMut :: UnliftedMut arr s b -> Mutable arr s b
 
 
 -- | A typeclass that is satisfied by all types. This is used
@@ -321,22 +332,18 @@ class (ContiguousSlice arr) => Contiguous arr where
 class Always a where {}
 instance Always a where {}
 
--- FIXME delete fromMutableArray
-fromMutableArray :: (PrimMonad m, ContiguousSlice arr, Element arr a)
-  => Mutable arr (PrimState m) a -> m (MutableSlice arr (PrimState m) a)
-{-# INLINE fromMutableArray #-}
-fromMutableArray baseMut = do
-  lengthMut <- sizeMut baseMut
-  pure MutableSlice{offsetMut=0,lengthMut,baseMut}
-
 instance (Contiguous arr) => ContiguousSlice (Slice arr) where
   type Mutable (Slice arr) = MutableSlice arr
   type Element (Slice arr) = Element arr
   type Sliced (Slice arr) = Slice arr
   type SlicedMut (Slice arr) = MutableSlice arr
   ------ Construction ------
-  new len = fromMutableArray =<< new len
-  replicateMut len x = fromMutableArray =<< replicateMut len x
+  new len = do
+    baseMut <- new len
+    pure MutableSlice{offsetMut=0,lengthMut=len,baseMut=unliftMut baseMut}
+  replicateMut len x = do
+    baseMut <- replicateMut len x
+    pure MutableSlice{offsetMut=0,lengthMut=len,baseMut=unliftMut baseMut}
   empty = Slice{offset=0,length=0,base=unlift empty}
   singleton a = Slice{offset=0,length=1,base=unlift $ singleton a}
   doubleton a b = Slice{offset=0,length=2,base=unlift $ doubleton a b}
@@ -347,8 +354,8 @@ instance (Contiguous arr) => ContiguousSlice (Slice arr) where
   index Slice{offset,base} i = index (lift base) (offset + i)
   index# Slice{offset,base} i = index# (lift base) (offset + i)
   indexM Slice{offset,base} i = indexM (lift base) (offset + i)
-  read MutableSlice{offsetMut,baseMut} i = read baseMut (offsetMut + i)
-  write MutableSlice{offsetMut,baseMut} i = write baseMut (offsetMut + i)
+  read MutableSlice{offsetMut,baseMut} i = read (liftMut baseMut) (offsetMut + i)
+  write MutableSlice{offsetMut,baseMut} i = write (liftMut baseMut) (offsetMut + i)
 
   ------ Properties ------
   null Slice{length} = length == 0
@@ -363,7 +370,7 @@ instance (Contiguous arr) => ContiguousSlice (Slice arr) where
       else index (lift a) iA == index (lift b) iB && loop (i+1) (iA+1) (iB+1)
   equalsMut MutableSlice{offsetMut=offA,lengthMut=lenA,baseMut=a}
                 MutableSlice{offsetMut=offB,lengthMut=lenB,baseMut=b}
-    =  a `equalsMut` b
+    =  liftMut a `equalsMut` liftMut b
     && offA == offB
     && lenA == lenB
 
@@ -383,28 +390,28 @@ instance (Contiguous arr) => ContiguousSlice (Slice arr) where
     Slice{offset=offset+off',length=len',base}
   cloneMut xs@MutableSlice{lengthMut} = cloneMut_ xs 0 lengthMut
   cloneMut_ MutableSlice{offsetMut,baseMut} off' len' = do
-    base' <- cloneMut_ baseMut (offsetMut + off') len'
-    pure MutableSlice{offsetMut=0,lengthMut=len',baseMut=base'}
+    baseMut' <- cloneMut_ (liftMut baseMut) (offsetMut + off') len'
+    pure MutableSlice{offsetMut=0,lengthMut=len',baseMut=unliftMut baseMut'}
   freeze xs@MutableSlice{lengthMut}
     = freeze_ xs 0 lengthMut
   freeze_ MutableSlice{offsetMut,baseMut} off' len' = do
-    base <- freeze_ baseMut (offsetMut + off') len'
+    base <- freeze_ (liftMut baseMut) (offsetMut + off') len'
     pure Slice{offset=0,length=len',base=unlift base}
   thaw xs@Slice{length} = thaw_ xs 0 length
   thaw_ Slice{offset,base} off' len' = do
     baseMut <- thaw_ (lift base) (offset + off') len'
-    pure MutableSlice{offsetMut=0,lengthMut=len',baseMut}
+    pure MutableSlice{offsetMut=0,lengthMut=len',baseMut=unliftMut baseMut}
   toSlice = id
   toSliceMut = pure
 
   ------ Copy Operations ------
   copy dst dstOff src@Slice{length} = copy_ dst dstOff src 0 length
   copy_ MutableSlice{offsetMut,baseMut} dstOff Slice{offset,base} off' len =
-    copy_ baseMut (offsetMut + dstOff) (lift base) (offset + off') len
+    copy_ (liftMut baseMut) (offsetMut + dstOff) (lift base) (offset + off') len
   copyMut dst dstOff src@MutableSlice{lengthMut} = copyMut_ dst dstOff src 0 lengthMut
   copyMut_ MutableSlice{offsetMut=dstOff,baseMut=dst} dstOff'
            MutableSlice{offsetMut=srcOff,baseMut=src} srcOff' len =
-    copyMut_ dst (dstOff + dstOff') src (srcOff + srcOff') len
+    copyMut_ (liftMut dst) (dstOff + dstOff') (liftMut src) (srcOff + srcOff') len
   insertSlicing Slice{offset,length,base} i x = run $ do
     dst <- replicateMut (length + 1) x
     copy_ dst 0 (lift base) offset i
@@ -477,11 +484,11 @@ instance ContiguousSlice SmallArray where
     0 -> True
     _ -> False
   slice base offset length = Slice{offset,length,base=unlift base}
-  sliceMut baseMut offsetMut lengthMut = MutableSlice{offsetMut,lengthMut,baseMut}
+  sliceMut baseMut offsetMut lengthMut = MutableSlice{offsetMut,lengthMut,baseMut=unliftMut baseMut}
   toSlice base = Slice{offset=0,length=size base,base=unlift base}
   toSliceMut baseMut = do
     lengthMut <- sizeMut baseMut
-    pure MutableSlice{offsetMut=0,lengthMut,baseMut}
+    pure MutableSlice{offsetMut=0,lengthMut,baseMut=unliftMut baseMut}
   freeze_ = freezeSmallArray
   size = sizeofSmallArray
   sizeMut = (\x -> pure $! sizeofSmallMutableArray x)
@@ -558,14 +565,19 @@ instance ContiguousSlice SmallArray where
 
 instance Contiguous SmallArray where
   type Unlifted SmallArray = SmallArray#
+  type UnliftedMut SmallArray = SmallMutableArray#
   resize = resizeSmallArray
   unsafeFreeze = unsafeFreezeSmallArray
   unlift (SmallArray x) = x
+  unliftMut (SmallMutableArray x) = x
   lift x = SmallArray x
+  liftMut x = SmallMutableArray x
   {-# inline resize #-}
   {-# inline unsafeFreeze #-}
   {-# inline unlift #-}
+  {-# inline unliftMut #-}
   {-# inline lift #-}
+  {-# inline liftMut #-}
 
 instance ContiguousSlice PrimArray where
   type Mutable PrimArray = MutablePrimArray
@@ -583,11 +595,11 @@ instance ContiguousSlice PrimArray where
   size = sizeofPrimArray
   sizeMut = getSizeofMutablePrimArray
   slice base offset length = Slice{offset,length,base=unlift base}
-  sliceMut baseMut offsetMut lengthMut = MutableSlice{offsetMut,lengthMut,baseMut}
+  sliceMut baseMut offsetMut lengthMut = MutableSlice{offsetMut,lengthMut,baseMut=unliftMut baseMut}
   toSlice base = Slice{offset=0,length=size base,base=unlift base}
   toSliceMut baseMut = do
     lengthMut <- sizeMut baseMut
-    pure MutableSlice{offsetMut=0,lengthMut,baseMut}
+    pure MutableSlice{offsetMut=0,lengthMut,baseMut=unliftMut baseMut}
   freeze_ = freezePrimArrayShim
   thaw_ = thawPrimArray
   copy_ = copyPrimArray
@@ -663,16 +675,22 @@ instance ContiguousSlice PrimArray where
   {-# INLINE run #-}
 
 newtype PrimArray# a = PrimArray# ByteArray#
+newtype MutablePrimArray# s a = MutablePrimArray# (MutableByteArray# s)
 instance Contiguous PrimArray where
   type Unlifted PrimArray = PrimArray#
+  type UnliftedMut PrimArray = MutablePrimArray#
   resize = resizeMutablePrimArray
   unsafeFreeze = unsafeFreezePrimArray
   unlift (PrimArray x) = PrimArray# x
+  unliftMut (MutablePrimArray x) = MutablePrimArray# x
   lift (PrimArray# x) = PrimArray x
+  liftMut (MutablePrimArray# x) = MutablePrimArray x
   {-# inline resize #-}
   {-# inline unsafeFreeze #-}
   {-# inline unlift #-}
+  {-# inline unliftMut #-}
   {-# inline lift #-}
+  {-# inline liftMut #-}
 
 instance ContiguousSlice Array where
   type Mutable Array = MutableArray
@@ -690,11 +708,11 @@ instance ContiguousSlice Array where
   size = sizeofArray
   sizeMut = (\x -> pure $! sizeofMutableArray x)
   slice base offset length = Slice{offset,length,base=unlift base}
-  sliceMut baseMut offsetMut lengthMut = MutableSlice{offsetMut,lengthMut,baseMut}
+  sliceMut baseMut offsetMut lengthMut = MutableSlice{offsetMut,lengthMut,baseMut=unliftMut baseMut}
   toSlice base = Slice{offset=0,length=size base,base=unlift base}
   toSliceMut baseMut = do
     lengthMut <- sizeMut baseMut
-    pure MutableSlice{offsetMut=0,lengthMut,baseMut}
+    pure MutableSlice{offsetMut=0,lengthMut,baseMut=unliftMut baseMut}
   freeze_ = freezeArray
   thaw_ = thawArray
   copy_ = copyArray
@@ -766,14 +784,19 @@ instance ContiguousSlice Array where
 
 instance Contiguous Array where
   type Unlifted Array = Array#
+  type UnliftedMut Array = MutableArray#
   resize = resizeArray
   unsafeFreeze = unsafeFreezeArray
-  unlift (Array x) = unsafeCoerce# x
-  lift x = Array (unsafeCoerce# x)
+  unlift (Array x) = x
+  unliftMut (MutableArray x) = x
+  lift x = Array x
+  liftMut x = MutableArray x
   {-# inline resize #-}
   {-# inline unsafeFreeze #-}
   {-# inline unlift #-}
+  {-# inline unliftMut #-}
   {-# inline lift #-}
+  {-# inline liftMut #-}
 
 instance ContiguousSlice UnliftedArray where
   type Mutable UnliftedArray = MutableUnliftedArray
@@ -791,12 +814,12 @@ instance ContiguousSlice UnliftedArray where
   size = sizeofUnliftedArray
   sizeMut = pure . sizeofMutableUnliftedArray
   slice base offset length = Slice{offset,length,base=unlift base}
-  sliceMut baseMut offsetMut lengthMut = MutableSlice{offsetMut,lengthMut,baseMut}
+  sliceMut baseMut offsetMut lengthMut = MutableSlice{offsetMut,lengthMut,baseMut=unliftMut baseMut}
   freeze_ = freezeUnliftedArray
   toSlice base = Slice{offset=0,length=size base,base=unlift base}
   toSliceMut baseMut = do
     lengthMut <- sizeMut baseMut
-    pure MutableSlice{offsetMut=0,lengthMut,baseMut}
+    pure MutableSlice{offsetMut=0,lengthMut,baseMut=unliftMut baseMut}
   thaw_ = thawUnliftedArray
   copy_ = copyUnliftedArray
   copyMut_ = copyMutableUnliftedArray
@@ -866,13 +889,19 @@ instance ContiguousSlice UnliftedArray where
 
 
 newtype UnliftedArray# a = UnliftedArray# ArrayArray#
+newtype MutableUnliftedArray# s a = MutableUnliftedArray# (MutableArrayArray# s)
 instance Contiguous UnliftedArray where
   type Unlifted UnliftedArray = UnliftedArray#
+  type UnliftedMut UnliftedArray = MutableUnliftedArray#
   resize = resizeUnliftedArray
   unsafeFreeze = unsafeFreezeUnliftedArray
   unlift (UnliftedArray x) = (UnliftedArray# x)
+  unliftMut (MutableUnliftedArray x) = (MutableUnliftedArray# x)
   lift (UnliftedArray# x) = UnliftedArray x
+  liftMut (MutableUnliftedArray# x) = MutableUnliftedArray x
   {-# inline resize #-}
   {-# inline unsafeFreeze #-}
   {-# inline unlift #-}
+  {-# inline unliftMut #-}
   {-# inline lift #-}
+  {-# inline liftMut #-}
