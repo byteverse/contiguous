@@ -8,9 +8,13 @@
 {-# language TypeFamilyDependencies #-}
 {-# language UnboxedTuples #-}
 
--- | The contiguous typeclass parameterises over a contiguous array type.
---   This allows us to have a common API to a number of contiguous
---   array types and their mutable counterparts.
+-- | The contiguous package presents a common API to a number of contiguous
+-- array types and their mutable counterparts. This is enabled with the
+-- 'Contiguous' typeclass, which parameterises over a contiguous array type and
+-- defines the core operations. However, the stable part of the interface is
+-- contained in this module, which combines those primitives into common,
+-- efficient array algorithms suitable for replacing pointer-heavy list
+-- manipulations.
 module Data.Primitive.Contiguous
   (
     -- * Accessors
@@ -83,6 +87,8 @@ module Data.Primitive.Contiguous
 
     -- ** Resizing
   , resize
+  , shrink
+  , unsafeShrinkAndFreeze
 
     -- * Elementwise operations
     -- ** Mapping
@@ -198,7 +204,9 @@ module Data.Primitive.Contiguous
     -- ** Other array types
   , convert
   , lift
+  , liftMut
   , unlift
+  , unliftMut
     -- ** Between mutable and immutable variants
   , clone
   , cloneMut
@@ -215,8 +223,8 @@ module Data.Primitive.Contiguous
   , rnf
 
     -- * Classes
-  , Contiguous
-  , ContiguousSlice(Mutable,Element,Sliced,MutableSliced)
+  , Contiguous(Mutable,Element,Sliced,MutableSliced)
+  , ContiguousU
   , Always
 
     -- * Re-Exports
@@ -240,7 +248,7 @@ import Control.Monad (when)
 import Control.Monad.ST (runST,ST)
 import Data.Bits (xor)
 import Data.Coerce (coerce)
-import Data.Primitive.Contiguous.Class (Contiguous(..), ContiguousSlice(..), Slice, MutableSlice, Always)
+import Data.Primitive.Contiguous.Class (Contiguous(..), ContiguousU(..), Slice, MutableSlice, Always)
 import Data.Semigroup (First(..))
 import Data.Word (Word8)
 import GHC.Base (build)
@@ -1190,10 +1198,7 @@ unfoldrMutableN !maxSz f z0 = do
             go (ix + 1) s'
         else pure ix
   sz <- go 0 z0
-  case compare maxSz sz of
-    EQ -> pure m
-    GT -> resize m sz
-    LT -> error "Data.Primitive.Contiguous.unfoldrMutableN: internal error"
+  shrink m sz
 {-# inline unfoldrMutableN #-}
 
 -- | Convert an array to a list.
@@ -1381,8 +1386,10 @@ reverseSlice !marr !start !end = do
 -- on is that if it returns 'True', the two immutable arrays are definitely the
 -- same. This is useful as shortcut for equality tests. However, keep in mind
 -- that a result of 'False' tells us nothing about the arguments.
-same :: Contiguous arr => arr a -> arr a -> Bool
-same a b = isTrue# (sameMutableArrayArray# (unsafeCoerce# (unlift a) :: MutableArrayArray# s) (unsafeCoerce# (unlift b) :: MutableArrayArray# s))
+same :: ContiguousU arr => arr a -> arr a -> Bool
+same a b = isTrue# (sameMutableArrayArray#
+  (unsafeCoerce# (unlift a) :: MutableArrayArray# s)
+  (unsafeCoerce# (unlift b) :: MutableArrayArray# s))
 
 hashIntWithSalt :: Int -> Int -> Int
 hashIntWithSalt salt x = salt `combine` x
