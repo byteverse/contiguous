@@ -1,3 +1,9 @@
+0.6.0: [2021.XX.XX]
+-------------------
+* Add `Slice`, `MutableSlice`.
+* Split `Contiguous` into `ContiguousSlice` and `Contiguous`.
+* Add `shrink` and `unsafeShrinkAndFreeze`
+
 0.5.2: [2021.08.11]
 -------------------
 * Add `ifoldlM'`.

@@ -1,6 +1,6 @@
 cabal-version: 2.0
 name: contiguous
-version: 0.5.2
+version: 0.6.0
 homepage: https://github.com/andrewthad/contiguous
 bug-reports: https://github.com/andrewthad/contiguous/issues
 author: Andrew Martin
@@ -24,6 +24,9 @@ source-repository head
 library
   exposed-modules:
     Data.Primitive.Contiguous
+    Data.Primitive.Contiguous.Class
+  other-modules:
+    Data.Primitive.Contiguous.Shim
   hs-source-dirs: src
   build-depends:
       base >=4.11.1.0 && <5
