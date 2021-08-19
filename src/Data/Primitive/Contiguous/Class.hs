@@ -351,20 +351,23 @@ class Contiguous (arr :: Type -> Type) where
   --
   -- The default implementation performs a memset which would be unnecessary
   -- except that the garbage collector might trace the uninitialized array.
-  insertSlicing :: (Element arr b)
-    => Sliced arr b -- ^ slice to copy from
+  --
+  -- Was previously @insertSlicing@
+  -- @since 0.6.0
+  insertAt :: (Element arr b)
+    => arr b -- ^ slice to copy from
     -> Int -- ^ index in the output array to insert at
     -> b -- ^ element to insert
     -> arr b
-  default insertSlicing ::
-       (Sliced arr ~ Slice arr, Element arr b, ContiguousU arr)
-    => Sliced arr b -> Int -> b -> arr b
-  insertSlicing src i x = run $ do
+  default insertAt ::
+       (Element arr b, ContiguousU arr)
+    => arr b -> Int -> b -> arr b
+  insertAt src i x = run $ do
     dst <- replicateMut (size src + 1) x
     copy dst 0 (slice src 0 i)
     copy dst (i + 1) (slice src i (size src - i))
     unsafeFreeze dst
-  {-# inline insertSlicing #-}
+  {-# inline insertAt #-}
 
   ------ Reduction ------
   -- | Reduce the array and all of its elements to WHNF.
@@ -537,8 +540,8 @@ instance (ContiguousU arr) => Contiguous (Slice arr) where
   copyMut_ MutableSlice{offsetMut=dstOff,baseMut=dst} dstOff'
            MutableSlice{offsetMut=srcOff,baseMut=src} srcOff' len =
     copyMut_ (liftMut dst) (dstOff + dstOff') (liftMut src) (srcOff + srcOff') len
-  {-# INLINE insertSlicing #-}
-  insertSlicing Slice{offset,length,base} i x = run $ do
+  {-# INLINE insertAt #-}
+  insertAt Slice{offset,length,base} i x = run $ do
     dst <- replicateMut (length + 1) x
     copy_ dst 0 (lift base) offset i
     copy_ dst (i + 1) (lift base) (offset + i) (length - i)
@@ -753,8 +756,8 @@ instance Contiguous PrimArray where
     writePrimArray m 2 c
     writePrimArray m 3 d
     unsafeFreezePrimArray m
-  {-# INLINE insertSlicing #-}
-  insertSlicing src i x = runPrimArrayST $ do
+  {-# INLINE insertAt #-}
+  insertAt src i x = runPrimArrayST $ do
     dst <- new (size src + 1)
     copy dst 0 (slice src 0 i)
     write dst i x

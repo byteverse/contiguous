@@ -25,7 +25,6 @@ library
   exposed-modules:
     Data.Primitive.Contiguous
     Data.Primitive.Contiguous.Class
-    -- Data.Primitive.Contiguous.Slice
   other-modules:
     Data.Primitive.Contiguous.Shim
   hs-source-dirs: src

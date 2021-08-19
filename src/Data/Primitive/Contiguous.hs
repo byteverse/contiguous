@@ -64,7 +64,6 @@ module Data.Primitive.Contiguous
   , append
     -- ** Splitting and Splicing
   , insertAt
-  , insertSlicing
 
     -- * Slicing
   , Slice
@@ -266,10 +265,6 @@ append !a !b = run $ do
   copy m (size a) (toSlice b)
   unsafeFreeze m
 {-# inline append #-}
-
--- | Insert an element into an array at the given index.
-insertAt :: (Contiguous arr, Element arr a) => arr a -> Int -> a -> arr a
-insertAt src i x = insertSlicing (toSlice src) i x
 
 -- | Create a copy of an array except the element at the index is replaced with
 --   the given value.
