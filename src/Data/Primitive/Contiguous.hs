@@ -79,6 +79,7 @@ module Data.Primitive.Contiguous
   , modifyAt'
   , modifyAtF
   , modifyAtF'
+  , deleteAt
     -- ** Permutations
   , reverse
   , reverseMutable
@@ -141,6 +142,7 @@ module Data.Primitive.Contiguous
   , foldMap'
   , foldlMap'
   , ifoldl'
+  , ifoldr
   , ifoldr'
   , ifoldlMap'
   , ifoldlMap1'
@@ -266,6 +268,15 @@ append !a !b = run $ do
   unsafeFreeze m
 {-# inline append #-}
 
+-- | Delete the element at the given position.
+deleteAt :: (Contiguous arr, Element arr a) => arr a -> Int -> arr a
+deleteAt src i = run $ do
+  dst <- thaw (slice src 0 (size src - 1))
+  let !i' = i + 1
+  copy dst i (slice src i' (size src - i'))
+  unsafeFreeze dst
+{-# inline deleteAt #-}
+
 -- | Create a copy of an array except the element at the index is replaced with
 --   the given value.
 replaceAt :: (Contiguous arr, Element arr a) => arr a -> Int -> a -> arr a
@@ -387,6 +398,18 @@ foldr f z = \arr ->
       go !ix = if sz > ix
         then case index# arr ix of
           (# x #) -> f x (go (ix + 1))
+        else z
+  in go 0
+
+-- | Right fold over the element of an array, lazy in the accumulator,
+-- provides index to the step function.
+ifoldr :: (Contiguous arr, Element arr a) => (Int -> a -> b -> b) -> b -> arr a -> b
+{-# inline ifoldr #-}
+ifoldr f z = \arr ->
+  let !sz = size arr
+      go !ix = if sz > ix
+        then case index# arr ix of
+          (# x #) -> f ix x (go (ix + 1))
         else z
   in go 0
 
