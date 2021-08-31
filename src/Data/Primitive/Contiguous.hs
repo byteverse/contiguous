@@ -163,6 +163,7 @@ module Data.Primitive.Contiguous
   , itraverse
   , itraverse_
   , traverseP
+  , itraverseP
   , mapM
   , forM
   , mapM_
@@ -790,6 +791,29 @@ traverseP f !arr = do
   go 0
   unsafeFreeze marr
 {-# inline traverseP #-}
+
+-- | Map each element of the array to an action, evaluate these
+--   actions from left to right, and collect the results in a
+--   new array.
+itraverseP ::
+     ( PrimMonad m
+     , Contiguous arr1, Element arr1 a
+     , Contiguous arr2, Element arr2 b
+     )
+  => (Int -> a -> m b)
+  -> arr1 a
+  -> m (arr2 b)
+itraverseP f !arr = do
+  let !sz = size arr
+  !marr <- new sz
+  let go !ix = when (ix < sz) $ do
+        a <- indexM arr ix
+        b <- f ix a
+        write marr ix b
+        go (ix + 1)
+  go 0
+  unsafeFreeze marr
+{-# inline itraverseP #-}
 
 newtype STA v a = STA {_runSTA :: forall s. Mutable v s a -> ST s (v a)}
 
