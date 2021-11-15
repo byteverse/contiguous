@@ -1,4 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -39,9 +41,19 @@ import Data.Primitive.Unlifted.Class (PrimUnlifted)
 import GHC.Exts (ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArrayArray#)
 import GHC.Exts (SmallMutableArray#,MutableArray#,MutableArrayArray#)
 import GHC.Exts (SmallArray#,Array#)
-import GHC.Exts (TYPE,RuntimeRep(UnliftedRep))
+import GHC.Exts (TYPE)
 
 import qualified Control.DeepSeq as DS
+
+-- In GHC 9.2 the UnliftedRep constructor of RuntimeRep was removed
+-- and replaced with a type synonym
+#if __GLASGOW_HASKELL__  >= 902
+import GHC.Exts (UnliftedRep)
+#else
+import GHC.Exts (RuntimeRep(UnliftedRep))
+type UnliftedRep = 'UnliftedRep
+#endif
+
 
 -- | Slices of immutable arrays: packages an offset and length with a backing array.
 --
@@ -381,9 +393,9 @@ class Contiguous (arr :: Type -> Type) where
 -- @since 0.6.0
 class (Contiguous arr) => ContiguousU arr where
   -- | The unifted version of the immutable array type (i.e. eliminates an indirection through a thunk).
-  type Unlifted arr = (r :: Type -> TYPE 'UnliftedRep) | r -> arr
+  type Unlifted arr = (r :: Type -> TYPE UnliftedRep) | r -> arr
   -- | The unifted version of the mutable array type (i.e. eliminates an indirection through a thunk).
-  type UnliftedMut arr = (r :: Type -> Type -> TYPE 'UnliftedRep) | r -> arr
+  type UnliftedMut arr = (r :: Type -> Type -> TYPE UnliftedRep) | r -> arr
   -- | Resize an array into one with the given size.
   resize :: (PrimMonad m, Element arr b)
          => Mutable arr (PrimState m) b

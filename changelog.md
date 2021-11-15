@@ -1,3 +1,7 @@
+0.6.1.1: [2021.XX.XX]
+---------------------
+* Allow building with GHC 9.2.1
+
 0.6.0: [2021.XX.XX]
 -------------------
 * Add `Slice`, `MutableSlice`.
