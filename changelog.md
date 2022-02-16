@@ -1,6 +1,12 @@
-0.6.1.1: [2021.XX.XX]
+0.6.1.1: [2022.02.16]
 ---------------------
-* Allow building with GHC 9.2.1
+* Allow building with GHC 9.2.1.
+* Drop support for GHC 8.8 and earlier.
+
+0.6.1.0: [2021.09.01]
+---------------------
+* Add `itraverseP`
+* Add `deleteAt` and `ifoldr`
 
 0.6.0: [2021.XX.XX]
 -------------------
