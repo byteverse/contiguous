@@ -154,6 +154,8 @@ module Data.Primitive.Contiguous
     -- ** Zipping Folds
   , foldrZipWith
   , ifoldrZipWith
+  , foldlZipWith'
+  , ifoldlZipWith'
   , foldlZipWithM'
   , ifoldlZipWithM'
 
@@ -1858,6 +1860,39 @@ ifoldrZipWith f z = \arr1 arr2 ->
         else z
   in go 0
 {-# inline ifoldrZipWith #-}
+
+foldlZipWith' ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => (c -> a -> b -> c)
+    -> c
+    -> arr1 a
+    -> arr2 b
+    -> c
+foldlZipWith' f = ifoldlZipWith' (\_ x y c -> f x y c)
+{-# inline foldlZipWith' #-}
+
+ifoldlZipWith' ::
+  ( Contiguous arr1
+  , Contiguous arr2
+  , Element arr1 a
+  , Element arr2 b
+  ) => (Int -> c -> a -> b -> c)
+    -> c
+    -> arr1 a
+    -> arr2 b
+    -> c
+ifoldlZipWith' f !z !arr1 !arr2 =
+  let !sz = min (size arr1) (size arr2)
+      go !ix !acc = if ix == sz
+        then acc
+        else case index# arr1 ix of
+          (# x #) -> case index# arr2 ix of
+            (# y #) -> go (ix + 1) (f ix acc x y)
+  in go 0 z
+{-# inline ifoldlZipWith' #-}
 
 -- | Variant of 'foldlZipWithM\'' that provides the index of each pair of elements.
 ifoldlZipWithM' ::
