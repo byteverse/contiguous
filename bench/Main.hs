@@ -58,17 +58,17 @@ main = do
         func "primArray100" size primArray100
         func "primArray1000" size primArray1000
 
-        io "marray10" sizeMutable marray10
-        io "marray100" sizeMutable marray100
-        io "marray1000" sizeMutable marray1000
+        io "marray10" sizeMut marray10
+        io "marray100" sizeMut marray100
+        io "marray1000" sizeMut marray1000
 
-        io "msmallArray10" sizeMutable msmallArray10
-        io "msmallArray100" sizeMutable msmallArray100
-        io "msmallArray1000" sizeMutable msmallArray1000
+        io "msmallArray10" sizeMut msmallArray10
+        io "msmallArray100" sizeMut msmallArray100
+        io "msmallArray1000" sizeMut msmallArray1000
 
-        io "mprimArray10" sizeMutable mprimArray10
-        io "mprimArray100" sizeMutable mprimArray100
-        io "mprimArray1000" sizeMutable mprimArray1000
+        io "mprimArray10" sizeMut mprimArray10
+        io "mprimArray100" sizeMut mprimArray100
+        io "mprimArray1000" sizeMut mprimArray1000
       wgroup "null" $ do
         func "array10" null array10
         func "array100" null array100
