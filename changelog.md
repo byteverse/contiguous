@@ -1,3 +1,8 @@
+0.6.2.0: [2022.04.13]
+---------------------
+* Make benchmarks build
+* Add strict ifoldlZipWith and foldlZipWith
+
 0.6.1.1: [2022.02.16]
 ---------------------
 * Allow building with GHC 9.2.1.
