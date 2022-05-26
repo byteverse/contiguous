@@ -148,6 +148,7 @@ module Data.Primitive.Contiguous
   , ifoldlMap1'
   , foldlM'
   , ifoldlM'
+  , foldrM'
   , asum
   , all
   , any
@@ -532,10 +533,24 @@ ifoldlMap1' f = \arr ->
   in go 1 (f 0 e0)
 {-# inline ifoldlMap1' #-}
 
+-- | Strict right monadic fold over the elements of an array.
+foldrM' :: (Contiguous arr, Element arr a, Monad m)
+  => (a -> b -> m b) -> b -> arr a -> m b
+foldrM' f !z0 = \arr ->
+  let !sz = size arr
+      go !ix !acc1 = if ix >= 0
+        then do
+          let (# x #) = index# arr ix
+          acc2 <- f x acc1
+          go (ix - 1) acc2
+        else pure acc1
+  in go (sz - 1) z0
+{-# inline foldrM' #-}
+
 -- | Strict left monadic fold over the elements of an array.
 foldlM' :: (Contiguous arr, Element arr a, Monad m)
   => (b -> a -> m b) -> b -> arr a -> m b
-foldlM' f z0 = \arr ->
+foldlM' f !z0 = \arr ->
   let !sz = size arr
       go !ix !acc1 = if ix < sz
         then do
