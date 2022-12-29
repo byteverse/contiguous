@@ -1086,6 +1086,7 @@ generateM :: (Contiguous arr, Element arr a, Monad m)
   => Int
   -> (Int -> m a)
   -> m (arr a)
+{-# inline generateM #-}
 generateM !sz f =
   let go !ix = if ix < sz
         then liftA2
