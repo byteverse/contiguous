@@ -246,13 +246,14 @@ module Data.Primitive.Contiguous
 import Control.Monad.Primitive
 import Data.Primitive hiding (fromList,fromListN)
 import Data.Primitive.Unlifted.Array
-import Prelude hiding (map,all,any,foldr,foldMap,traverse,read,filter,replicate,null,reverse,foldl,foldr,zip,zipWith,scanl,(<$),elem,maximum,minimum,mapM,mapM_,sequence,sequence_)
+import Prelude hiding (Foldable(..),map,all,any,traverse,read,filter,replicate,reverse,zip,zipWith,scanl,(<$),mapM,mapM_,sequence,sequence_)
 
 import Control.Applicative (liftA2)
 import Control.Monad (when)
 import Control.Monad.ST (runST,ST)
 import Data.Bits (xor)
 import Data.Coerce (coerce)
+import Data.Foldable (length)
 import Data.Primitive.Contiguous.Class (Contiguous(..), ContiguousU(..), Slice, MutableSlice, Always)
 import Data.Semigroup (First(..))
 import Data.Word (Word8)
