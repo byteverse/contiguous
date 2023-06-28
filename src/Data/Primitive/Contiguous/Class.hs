@@ -5,10 +5,12 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UnboxedTuples #-}
 {-# LANGUAGE UnliftedNewtypes #-}
 
@@ -42,8 +44,13 @@ import GHC.Exts (ArrayArray#,Constraint,sizeofByteArray#,sizeofArray#,sizeofArra
 import GHC.Exts (SmallMutableArray#,MutableArray#,MutableArrayArray#)
 import GHC.Exts (SmallArray#,Array#)
 import GHC.Exts (TYPE)
+import Data.Primitive.Unlifted.Array (MutableUnliftedArray,UnliftedArray)
+import Data.Primitive.Unlifted.Array (MutableUnliftedArray_(MutableUnliftedArray),UnliftedArray_(UnliftedArray))
+import Data.Primitive.Unlifted.Array.Primops (MutableUnliftedArray#(MutableUnliftedArray#),UnliftedArray#(UnliftedArray#))
 
 import qualified Control.DeepSeq as DS
+import qualified Data.Primitive.Unlifted.Class as Class
+import qualified GHC.Exts as Exts
 
 -- In GHC 9.2 the UnliftedRep constructor of RuntimeRep was removed
 -- and replaced with a type synonym
@@ -128,6 +135,10 @@ class Contiguous (arr :: Type -> Type) where
   tripleton :: Element arr a => a -> a -> a -> arr a
   -- | Create a quadrupleton array.
   quadrupleton :: Element arr a => a -> a -> a -> a -> arr a
+  -- | Create a quintupleton array.
+  quintupleton :: Element arr a => a -> a -> a -> a -> a -> arr a
+  -- | Create a sextupleton array.
+  sextupleton :: Element arr a => a -> a -> a -> a -> a -> a -> arr a
 
   ------ Access and Update ------
   -- | Index into an array at the given index.
@@ -388,7 +399,7 @@ class Contiguous (arr :: Type -> Type) where
   run :: (forall s. ST s (arr a)) -> arr a
 
 -- | The 'ContiguousU' typeclass is an extension of the 'Contiguous' typeclass,
--- but includes operations that make sense only on uncliced contiguous structures.
+-- but includes operations that make sense only on unsliced contiguous structures.
 --
 -- @since 0.6.0
 class (Contiguous arr) => ContiguousU arr where
@@ -453,6 +464,10 @@ instance (ContiguousU arr) => Contiguous (Slice arr) where
   tripleton a b c = Slice{offset=0,length=3,base=unlift $ tripleton a b c}
   {-# INLINE quadrupleton #-}
   quadrupleton a b c d = Slice{offset=0,length=4,base=unlift $ quadrupleton a b c d}
+  {-# INLINE quintupleton #-}
+  quintupleton a b c d e = Slice{offset=0,length=5,base=unlift $ quintupleton a b c d e}
+  {-# INLINE sextupleton #-}
+  sextupleton a b c d e f = Slice{offset=0,length=6,base=unlift $ sextupleton a b c d e f}
 
   ------ Access and Update ------
   {-# INLINE index #-}
@@ -622,29 +637,42 @@ instance Contiguous SmallArray where
   equalsMut = (==)
   {-# INLINE singleton #-}
   singleton a = runST $ do
-    marr <- newSmallArray 1 errorThunk
-    writeSmallArray marr 0 a
+    marr <- newSmallArray 1 a
     unsafeFreezeSmallArray marr
   {-# INLINE doubleton #-}
   doubleton a b = runST $ do
-    m <- newSmallArray 2 errorThunk
-    writeSmallArray m 0 a
+    m <- newSmallArray 2 a
     writeSmallArray m 1 b
     unsafeFreezeSmallArray m
   {-# INLINE tripleton #-}
   tripleton a b c = runST $ do
-    m <- newSmallArray 3 errorThunk
-    writeSmallArray m 0 a
+    m <- newSmallArray 3 a
     writeSmallArray m 1 b
     writeSmallArray m 2 c
     unsafeFreezeSmallArray m
   {-# INLINE quadrupleton #-}
   quadrupleton a b c d = runST $ do
-    m <- newSmallArray 4 errorThunk
-    writeSmallArray m 0 a
+    m <- newSmallArray 4 a
     writeSmallArray m 1 b
     writeSmallArray m 2 c
     writeSmallArray m 3 d
+    unsafeFreezeSmallArray m
+  {-# INLINE quintupleton #-}
+  quintupleton a b c d e = runST $ do
+    m <- newSmallArray 5 a
+    writeSmallArray m 1 b
+    writeSmallArray m 2 c
+    writeSmallArray m 3 d
+    writeSmallArray m 4 e
+    unsafeFreezeSmallArray m
+  {-# INLINE sextupleton #-}
+  sextupleton a b c d e f = runST $ do
+    m <- newSmallArray 6 a
+    writeSmallArray m 1 b
+    writeSmallArray m 2 c
+    writeSmallArray m 3 d
+    writeSmallArray m 4 e
+    writeSmallArray m 5 f
     unsafeFreezeSmallArray m
   {-# INLINE rnf #-}
   rnf !ary =
@@ -768,6 +796,25 @@ instance Contiguous PrimArray where
     writePrimArray m 2 c
     writePrimArray m 3 d
     unsafeFreezePrimArray m
+  {-# INLINE quintupleton #-}
+  quintupleton a b c d e = runPrimArrayST $ do
+    m <- newPrimArray 5
+    writePrimArray m 0 a
+    writePrimArray m 1 b
+    writePrimArray m 2 c
+    writePrimArray m 3 d
+    writePrimArray m 4 e
+    unsafeFreezePrimArray m
+  {-# INLINE sextupleton #-}
+  sextupleton a b c d e f = runPrimArrayST $ do
+    m <- newPrimArray 6
+    writePrimArray m 0 a
+    writePrimArray m 1 b
+    writePrimArray m 2 c
+    writePrimArray m 3 d
+    writePrimArray m 4 e
+    writePrimArray m 5 f
+    unsafeFreezePrimArray m
   {-# INLINE insertAt #-}
   insertAt src i x = runPrimArrayST $ do
     dst <- new (size src + 1)
@@ -883,6 +930,23 @@ instance Contiguous Array where
     writeArray m 2 c
     writeArray m 3 d
     unsafeFreezeArray m
+  {-# INLINE quintupleton #-}
+  quintupleton a b c d e = runArrayST $ do
+    m <- newArray 5 a
+    writeArray m 1 b
+    writeArray m 2 c
+    writeArray m 3 d
+    writeArray m 4 e
+    unsafeFreezeArray m
+  {-# INLINE sextupleton #-}
+  sextupleton a b c d e f = runArrayST $ do
+    m <- newArray 6 a
+    writeArray m 1 b
+    writeArray m 2 c
+    writeArray m 3 d
+    writeArray m 4 e
+    writeArray m 5 f
+    unsafeFreezeArray m
   {-# INLINE run #-}
   run = runArrayST
 
@@ -900,12 +964,14 @@ instance ContiguousU Array where
   {-# INLINE liftMut #-}
   liftMut x = MutableArray x
 
+class (Class.Unlifted a ~ u, PrimUnlifted a) => PrimUnliftsInto (u :: TYPE ('Exts.BoxedRep 'Exts.Unlifted)) (a :: Type) where
+instance (Class.Unlifted a ~ u, PrimUnlifted a) => PrimUnliftsInto u a
 
-instance Contiguous UnliftedArray where
-  type Mutable UnliftedArray = MutableUnliftedArray
-  type Element UnliftedArray = PrimUnlifted
-  type Sliced UnliftedArray = Slice UnliftedArray
-  type MutableSliced UnliftedArray = MutableSlice UnliftedArray
+instance Contiguous (UnliftedArray_ unlifted_a) where
+  type Mutable (UnliftedArray_ unlifted_a) = MutableUnliftedArray_ unlifted_a
+  type Element (UnliftedArray_ unlifted_a) = PrimUnliftsInto unlifted_a
+  type Sliced (UnliftedArray_ unlifted_a) = Slice (UnliftedArray_ unlifted_a)
+  type MutableSliced (UnliftedArray_ unlifted_a) = MutableSlice (UnliftedArray_ unlifted_a)
   {-# INLINE empty #-}
   empty = emptyUnliftedArray
   {-# INLINE new #-}
@@ -953,7 +1019,7 @@ instance Contiguous UnliftedArray where
   {-# INLINE equals #-}
   equals = (==)
   {-# INLINE null #-}
-  null (UnliftedArray a) = case sizeofArrayArray# a of
+  null (UnliftedArray (UnliftedArray# a)) = case Exts.sizeofArray# a of
     0# -> True
     _ -> False
   {-# INLINE equalsMut #-}
@@ -987,21 +1053,41 @@ instance Contiguous UnliftedArray where
     writeUnliftedArray m 2 c
     writeUnliftedArray m 3 d
     unsafeFreezeUnliftedArray m
+  {-# INLINE quintupleton #-}
+  quintupleton a b c d e = runUnliftedArrayST $ do
+    m <- newUnliftedArray 5 a
+    writeUnliftedArray m 1 b
+    writeUnliftedArray m 2 c
+    writeUnliftedArray m 3 d
+    writeUnliftedArray m 4 e
+    unsafeFreezeUnliftedArray m
+  {-# INLINE sextupleton #-}
+  sextupleton a b c d e f = runUnliftedArrayST $ do
+    m <- newUnliftedArray 6 a
+    writeUnliftedArray m 1 b
+    writeUnliftedArray m 2 c
+    writeUnliftedArray m 3 d
+    writeUnliftedArray m 4 e
+    writeUnliftedArray m 5 f
+    unsafeFreezeUnliftedArray m
   {-# INLINE run #-}
   run = runUnliftedArrayST
 
-newtype UnliftedArray# a = UnliftedArray# ArrayArray#
-newtype MutableUnliftedArray# s a = MutableUnliftedArray# (MutableArrayArray# s)
-instance ContiguousU UnliftedArray where
-  type Unlifted UnliftedArray = UnliftedArray#
-  type UnliftedMut UnliftedArray = MutableUnliftedArray#
+newtype UnliftedArray## (u :: TYPE UnliftedRep) (a :: Type) =
+  UnliftedArray## (Exts.Array# u)
+newtype MutableUnliftedArray## (u :: TYPE UnliftedRep) s (a :: Type) =
+  MutableUnliftedArray## (Exts.MutableArray# s u)
+
+instance ContiguousU (UnliftedArray_ unlifted_a) where
+  type Unlifted (UnliftedArray_ unlifted_a) = UnliftedArray## unlifted_a
+  type UnliftedMut (UnliftedArray_ unlifted_a) = MutableUnliftedArray## unlifted_a
   {-# INLINE resize #-}
   resize = resizeUnliftedArray
   {-# INLINE unlift #-}
-  unlift (UnliftedArray x) = (UnliftedArray# x)
+  unlift (UnliftedArray (UnliftedArray# x)) = UnliftedArray## x
   {-# INLINE unliftMut #-}
-  unliftMut (MutableUnliftedArray x) = (MutableUnliftedArray# x)
+  unliftMut (MutableUnliftedArray (MutableUnliftedArray# x)) = MutableUnliftedArray## x
   {-# INLINE lift #-}
-  lift (UnliftedArray# x) = UnliftedArray x
+  lift (UnliftedArray## x) = UnliftedArray (UnliftedArray# x)
   {-# INLINE liftMut #-}
-  liftMut (MutableUnliftedArray# x) = MutableUnliftedArray x
+  liftMut (MutableUnliftedArray## x) = MutableUnliftedArray (MutableUnliftedArray# x)

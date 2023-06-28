@@ -1,3 +1,11 @@
+0.6.4.0: [2023.06.28]
+---------------------
+* Make it work with primitive-unlifted-2.1, which drops
+  support for older primitive-unlifted.
+* Add `quintupleton` and `sextupleton`.
+* Add `construct(1|2|3|4|5|6)` aliases for constructing arrays with
+  a small known number of elements.
+
 0.6.3.0: [2022.12.07]
 ---------------------
 * Add strict foldrM

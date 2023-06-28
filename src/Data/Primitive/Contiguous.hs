@@ -37,6 +37,8 @@ module Data.Primitive.Contiguous
   , doubleton
   , tripleton
   , quadrupleton
+  , quintupleton
+  , sextupleton
   , replicate
   , replicateMut
   , generate
@@ -45,6 +47,13 @@ module Data.Primitive.Contiguous
   , iterateN
   , iterateMutableN
   , write
+    -- ** Fixed Length
+  , construct1
+  , construct2
+  , construct3
+  , construct4
+  , construct5
+  , construct6
     -- ** Running
   , run
     -- ** Monadic initialisation
@@ -263,6 +272,35 @@ import GHC.Exts (MutableArrayArray#,unsafeCoerce#,sameMutableArrayArray#,isTrue#
 import qualified Control.Applicative as A
 import qualified Prelude
 
+construct1 :: (Contiguous arr, Element arr a)
+  => a -> arr a
+{-# inline construct1 #-}
+construct1 = singleton
+
+construct2 :: (Contiguous arr, Element arr a)
+  => a -> a -> arr a
+{-# inline construct2 #-}
+construct2 = doubleton
+
+construct3 :: (Contiguous arr, Element arr a)
+  => a -> a -> a -> arr a
+{-# inline construct3 #-}
+construct3 = tripleton
+
+construct4 :: (Contiguous arr, Element arr a)
+  => a -> a -> a -> a -> arr a
+{-# inline construct4 #-}
+construct4 = quadrupleton
+
+construct5 :: (Contiguous arr, Element arr a)
+  => a -> a -> a -> a -> a -> arr a
+{-# inline construct5 #-}
+construct5 = quintupleton
+
+construct6 :: (Contiguous arr, Element arr a)
+  => a -> a -> a -> a -> a -> a -> arr a
+{-# inline construct6 #-}
+construct6 = sextupleton
 
 -- | Append two arrays.
 append :: (Contiguous arr, Element arr a) => arr a -> arr a -> arr a
