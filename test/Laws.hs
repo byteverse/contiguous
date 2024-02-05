@@ -1,4 +1,6 @@
-{-# language InstanceSigs, TypeFamilies, UndecidableInstances #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 -- We define a newtype around `Array a` for the purpose of testing
 -- the definitions of many typeclass methods from `Data.Primitive.Contiguous`.
@@ -8,30 +10,33 @@ module Main (main) where
 
 import Data.Foldable
 import Data.Primitive.Contiguous
+import qualified Data.Primitive.Contiguous as C
 import Data.Proxy
+import qualified GHC.Exts as Exts
 import Test.QuickCheck
 import Test.QuickCheck.Classes
-import qualified Data.Primitive.Contiguous as C
-import qualified GHC.Exts as Exts
 
 main :: IO ()
 main = lawsCheckMany laws
 
 laws :: [(String, [Laws])]
 laws =
-  [ ("Arr", [ functorLaws arr
-            , applicativeLaws arr
-            , foldableLaws arr
-            , traversableLaws arr
-            , isListLaws arr1
-            ]
+  [
+    ( "Arr"
+    ,
+      [ functorLaws arr
+      , applicativeLaws arr
+      , foldableLaws arr
+      , traversableLaws arr
+      , isListLaws arr1
+      ]
     )
   ]
 
 newtype Arr a = Arr (Array a)
   deriving (Eq, Show)
 
-instance Arbitrary a => Arbitrary (Arr a) where
+instance (Arbitrary a) => Arbitrary (Arr a) where
   arbitrary = fmap (Arr . Exts.fromList) arbitrary
 
 arr :: Proxy Arr
@@ -59,10 +64,10 @@ instance Foldable Arr where
   length (Arr a) = C.size a
 
 instance Traversable Arr where
-  traverse :: Applicative f => (a -> f b) -> Arr a -> f (Arr b)
+  traverse :: (Applicative f) => (a -> f b) -> Arr a -> f (Arr b)
   traverse f (Arr a) = fmap Arr (C.traverse f a)
 
-  sequenceA :: Applicative f => Arr (f a) -> f (Arr a)
+  sequenceA :: (Applicative f) => Arr (f a) -> f (Arr a)
   sequenceA (Arr f) = fmap Arr (C.sequence f)
 
 instance Exts.IsList (Arr a) where
@@ -70,5 +75,3 @@ instance Exts.IsList (Arr a) where
   fromList = Arr . C.fromList
   fromListN len = Arr . C.fromListN len
   toList (Arr a) = Exts.toList a
-
-
