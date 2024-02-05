@@ -1,20 +1,21 @@
-{-# language
-        BangPatterns
-      , MagicHash
-      , ScopedTypeVariables
-      , TypeApplications
-      , UnboxedTuples
-  #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE UnboxedTuples #-}
 
 module Main (main) where
 
 import Prelude hiding
-  ( null, read, Foldable(..), map
+  ( Foldable (..)
+  , map
+  , null
+  , read
   )
 
 import Control.Monad
-import Data.Functor.Identity (Identity(..))
-import Data.Monoid (Sum(..))
+import Data.Functor.Identity (Identity (..))
+import Data.Monoid (Sum (..))
 import Data.Primitive.Contiguous
 import GHC.Exts (RealWorld)
 import System.Random
@@ -301,23 +302,31 @@ main = do
         func "primArray100" mapMaybeJ primArray100
         func "primArray1000" mapMaybeJ primArray1000
 
-mapMaybeJ :: forall arr. (Contiguous arr, Element arr Int)
-  => arr Int
-  -> ()
+mapMaybeJ ::
+  forall arr.
+  (Contiguous arr, Element arr Int) =>
+  arr Int ->
+  ()
 mapMaybeJ arr =
-  let !(arr' :: arr Int) = mapMaybe Just arr
+  let !(_arr' :: arr Int) = mapMaybe Just arr
    in ()
 
-mapPlus1 :: forall arr. (Contiguous arr, Element arr Int)
-  => arr Int -> ()
-mapPlus1 arr = let !(arr' :: arr Int) = map (+1) arr in ()
+mapPlus1 ::
+  forall arr.
+  (Contiguous arr, Element arr Int) =>
+  arr Int ->
+  ()
+mapPlus1 arr = let !(_arr' :: arr Int) = map (+ 1) arr in ()
 
-mapPlus1' :: forall arr. (Contiguous arr, Element arr Int)
-  => arr Int -> ()
-mapPlus1' arr = let !(arr' :: arr Int) = map' (+1) arr in ()
+mapPlus1' ::
+  forall arr.
+  (Contiguous arr, Element arr Int) =>
+  arr Int ->
+  ()
+mapPlus1' arr = let !(_arr' :: arr Int) = map' (+ 1) arr in ()
 
-plus1 :: Int -> Int
-plus1 = (+1)
+_plus1 :: Int -> Int
+_plus1 = (+ 1)
 
 sum1 :: a -> Sum Int
 sum1 = const (Sum 1)
@@ -335,21 +344,22 @@ index## :: (Contiguous arr, Element arr a) => Int -> arr a -> ()
 index## ix arr = case index# arr ix of !(# _x #) -> ()
 
 randomList :: Int -> IO [Int]
-randomList sz = replicateM sz (randomRIO (minBound,maxBound))
+randomList sz = replicateM sz (randomRIO (minBound, maxBound))
 
-randomC :: (Contiguous arr, Element arr Int)
-  => Int
-  -> IO (arr Int)
+randomC ::
+  (Contiguous arr, Element arr Int) =>
+  Int ->
+  IO (arr Int)
 randomC sz = do
   rList <- randomList sz
   rList' <- shuffleM rList
   pure (fromListN sz rList')
 
-randomCM :: (Contiguous arr, Element arr Int)
-  => Int
-  -> IO (Mutable arr RealWorld Int)
+randomCM ::
+  (Contiguous arr, Element arr Int) =>
+  Int ->
+  IO (Mutable arr RealWorld Int)
 randomCM sz = do
   rList <- randomList sz
   rList' <- shuffleM rList
   fromListMutableN sz rList'
-
