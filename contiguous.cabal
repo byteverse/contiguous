@@ -21,6 +21,8 @@ description:
   unified interface to working with `Array`, `SmallArray`,
   `PrimArray`, and `UnliftedArray`.
 
+tested-with:        GHC ==9.4.8 || ==9.6.3 || ==9.8.1
+
 common build-settings
   default-language: Haskell2010
   ghc-options:      -Wall -Wunused-packages
