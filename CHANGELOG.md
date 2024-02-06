@@ -1,5 +1,10 @@
 # Revision history for contiguous
 
+## 0.6.4.2 -- 2024-02-06
+
+* Restore support for versions of base that do not export `liftA2`
+  from the prelude.
+
 ## 0.6.4.1 -- 2024-02-05
 
 * Update package metadata.
