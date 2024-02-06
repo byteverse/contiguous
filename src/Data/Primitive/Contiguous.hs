@@ -1082,7 +1082,7 @@ itraverse f = \arr ->
           then pure (STA unsafeFreeze)
           else case index# arr ix of
             (# x #) ->
-              liftA2
+              A.liftA2
                 ( \b (STA m) -> STA $ \marr -> do
                     write marr ix b
                     m marr
@@ -1330,7 +1330,7 @@ generateM !sz f =
   let go !ix =
         if ix < sz
           then
-            liftA2
+            A.liftA2
               ( \b (STA m) -> STA $ \marr -> do
                   write marr ix b
                   m marr

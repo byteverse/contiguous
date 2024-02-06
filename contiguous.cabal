@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               contiguous
-version:            0.6.4.1
+version:            0.6.4.2
 homepage:           https://github.com/byteverse/contiguous
 bug-reports:        https://github.com/byteverse/contiguous/issues
 author:             Andrew Martin
