@@ -1,5 +1,9 @@
 # Revision history for contiguous
 
+## 0.6.4.2 -- 2024-02-06
+
+* Testing
+
 ## 0.6.4.1 -- 2024-02-05
 
 * Update package metadata.
