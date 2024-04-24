@@ -27,7 +27,7 @@ module Data.Primitive.Contiguous.Class
   , Always
   ) where
 
-import Data.Primitive hiding (fromList, fromListN)
+import Data.Primitive
 import Data.Primitive.Contiguous.Shim
 import Data.Primitive.Unlifted.Array
 import Prelude hiding
@@ -569,7 +569,12 @@ class (Contiguous arr) => ContiguousU arr where
   -- | The unifted version of the mutable array type (i.e. eliminates an indirection through a thunk).
   type UnliftedMut arr = (r :: Type -> Type -> TYPE UnliftedRep) | r -> arr
 
-  -- | Resize an array into one with the given size.
+  -- | Resize an array into one with the given size. If the array is grown,
+  -- then reading from any newly introduced element before writing to it is undefined behavior.
+  -- The current behavior is that anything backed by @MutableByteArray#@ ends
+  -- uninitialized memory at these indices. But for @SmallMutableArray@, these
+  -- are set to an error thunk, so reading from them and forcing the result
+  -- causes the program to crash.
   resize ::
     (PrimMonad m, Element arr b) =>
     Mutable arr (PrimState m) b ->
@@ -807,7 +812,7 @@ instance Contiguous SmallArray where
   {-# INLINE size #-}
   size = sizeofSmallArray
   {-# INLINE sizeMut #-}
-  sizeMut = (\x -> pure $! sizeofSmallMutableArray x)
+  sizeMut = getSizeofSmallMutableArray
   {-# INLINE thaw_ #-}
   thaw_ = thawSmallArray
   {-# INLINE equals #-}
@@ -872,15 +877,19 @@ instance Contiguous SmallArray where
   {-# INLINE copyMut_ #-}
   copyMut_ = copySmallMutableArray
   {-# INLINE replicateMut #-}
-  replicateMut = replicateSmallMutableArray
+  replicateMut = newSmallArray
   {-# INLINE run #-}
   run = runSmallArrayST
+  {-# INLINE shrink #-}
+  shrink !arr !n = do
+    shrinkSmallMutableArray arr n
+    pure arr
 
 instance ContiguousU SmallArray where
   type Unlifted SmallArray = SmallArray#
   type UnliftedMut SmallArray = SmallMutableArray#
   {-# INLINE resize #-}
-  resize = resizeSmallArray
+  resize !arr !n = resizeSmallMutableArray arr n resizeSmallMutableArrayUninitializedElement
   {-# INLINE unlift #-}
   unlift (SmallArray x) = x
   {-# INLINE unliftMut #-}
@@ -926,7 +935,7 @@ instance Contiguous PrimArray where
     lengthMut <- sizeMut baseMut
     pure MutableSlice {offsetMut = 0, lengthMut, baseMut = unliftMut baseMut}
   {-# INLINE freeze_ #-}
-  freeze_ = freezePrimArrayShim
+  freeze_ = freezePrimArray
   {-# INLINE unsafeFreeze #-}
   unsafeFreeze = unsafeFreezePrimArray
   {-# INLINE thaw_ #-}
@@ -936,9 +945,9 @@ instance Contiguous PrimArray where
   {-# INLINE copyMut_ #-}
   copyMut_ = copyMutablePrimArray
   {-# INLINE clone_ #-}
-  clone_ = clonePrimArrayShim
+  clone_ = clonePrimArray
   {-# INLINE cloneMut_ #-}
-  cloneMut_ = cloneMutablePrimArrayShim
+  cloneMut_ = cloneMutablePrimArray
   {-# INLINE equals #-}
   equals = (==)
   {-# INLINE null #-}
@@ -1250,6 +1259,20 @@ instance Contiguous (UnliftedArray_ unlifted_a) where
     unsafeFreezeUnliftedArray m
   {-# INLINE run #-}
   run = runUnliftedArrayST
+  {-# INLINE shrink #-}
+  shrink !arr !n = do
+    -- See Note [Shrinking Unlifted Arrays]
+    cloneMutableUnliftedArray arr 0 n
+  {-# INLINE unsafeShrinkAndFreeze #-}
+  unsafeShrinkAndFreeze !arr !n =
+    -- See Note [Shrinking Unlifted Arrays]
+    freezeUnliftedArray arr 0 n
+
+-- Note [Shrinking Unlifted Arrays]
+-- ================================
+-- This implementation copies the array rather than freezing it in place.
+-- But at least it is able to avoid assigning all of the elements to
+-- a nonsense value before replacing them with memcpy.
 
 newtype UnliftedArray## (u :: TYPE UnliftedRep) (a :: Type)
   = UnliftedArray## (Exts.Array# u)
@@ -1269,3 +1292,7 @@ instance ContiguousU (UnliftedArray_ unlifted_a) where
   lift (UnliftedArray## x) = UnliftedArray (UnliftedArray# x)
   {-# INLINE liftMut #-}
   liftMut (MutableUnliftedArray## x) = MutableUnliftedArray (MutableUnliftedArray# x)
+
+resizeSmallMutableArrayUninitializedElement :: a
+{-# noinline resizeSmallMutableArrayUninitializedElement #-}
+resizeSmallMutableArrayUninitializedElement = errorWithoutStackTrace "uninitialized element of resizeSmallMutableArray"
