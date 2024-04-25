@@ -574,7 +574,7 @@ class (Contiguous arr) => ContiguousU arr where
   -- The current behavior is that anything backed by @MutableByteArray#@ ends
   -- uninitialized memory at these indices. But for @SmallMutableArray@ or @Array@, these
   -- are set to an error thunk, so reading from them and forcing the result
-  -- causes the program to crash.
+  -- causes the program to crash. For @UnliftedArray@, the new elements have undefined values of an unknown type.
   resize ::
     (PrimMonad m, Element arr b) =>
     Mutable arr (PrimState m) b ->
