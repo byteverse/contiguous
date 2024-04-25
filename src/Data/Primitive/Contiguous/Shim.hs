@@ -8,7 +8,6 @@ module Data.Primitive.Contiguous.Shim
   , replicateMutablePrimArray
   ) where
 
-import Control.Monad (when)
 import Data.Primitive
 import Data.Primitive.Unlifted.Array
 import Prelude hiding (all, any, elem, filter, foldMap, foldl, foldr, map, mapM, mapM_, maximum, minimum, null, read, replicate, reverse, scanl, sequence, sequence_, traverse, zip, zipWith, (<$))
@@ -22,20 +21,25 @@ errorThunk = error "Contiguous typeclass: unitialized element"
 
 resizeArray :: (PrimMonad m) => MutableArray (PrimState m) a -> Int -> m (MutableArray (PrimState m) a)
 resizeArray !src !sz = do
-  dst <- newArray sz errorThunk
-  copyMutableArray dst 0 src 0 (min sz (sizeofMutableArray src))
-  pure dst
+  let !srcSz = sizeofMutableArray src
+  case compare sz srcSz of
+    EQ -> pure src
+    LT -> cloneMutableArray src 0 sz
+    GT -> do
+      dst <- newArray sz errorThunk
+      copyMutableArray dst 0 src 0 sz
+      pure dst
 {-# INLINE resizeArray #-}
 
 resizeUnliftedArray :: (PrimMonad m, PrimUnlifted a) => MutableUnliftedArray (PrimState m) a -> Int -> m (MutableUnliftedArray (PrimState m) a)
-resizeUnliftedArray !src !sz =
-  let !srcSz = sizeofMutableUnliftedArray src in
+resizeUnliftedArray !src !sz = do
+  let !srcSz = sizeofMutableUnliftedArray src
   case compare sz srcSz of
     EQ -> pure src
     LT -> cloneMutableUnliftedArray src 0 sz
     GT -> do
       dst <- unsafeNewUnliftedArray sz
-      copyMutableUnliftedArray dst 0 src 0 (min sz (sizeofMutableUnliftedArray src))
+      copyMutableUnliftedArray dst 0 src 0 sz
       pure dst
 {-# INLINE resizeUnliftedArray #-}
 
