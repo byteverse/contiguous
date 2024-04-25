@@ -575,6 +575,7 @@ class (Contiguous arr) => ContiguousU arr where
   -- uninitialized memory at these indices. But for @SmallMutableArray@ or @Array@, these
   -- are set to an error thunk, so reading from them and forcing the result
   -- causes the program to crash. For @UnliftedArray@, the new elements have undefined values of an unknown type.
+  -- If the array is not grown, it may (or may not) be modified in place.
   resize ::
     (PrimMonad m, Element arr b) =>
     Mutable arr (PrimState m) b ->
