@@ -572,7 +572,7 @@ class (Contiguous arr) => ContiguousU arr where
   -- | Resize an array into one with the given size. If the array is grown,
   -- then reading from any newly introduced element before writing to it is undefined behavior.
   -- The current behavior is that anything backed by @MutableByteArray#@ ends
-  -- uninitialized memory at these indices. But for @SmallMutableArray@, these
+  -- uninitialized memory at these indices. But for @SmallMutableArray@ or @Array@, these
   -- are set to an error thunk, so reading from them and forcing the result
   -- causes the program to crash.
   resize ::
