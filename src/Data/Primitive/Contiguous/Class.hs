@@ -1273,7 +1273,7 @@ instance Contiguous (UnliftedArray_ unlifted_a) where
 -- Note [Shrinking Arrays Without a Shrink Primop]
 -- ===============================================
 -- GHC's Array# type has a card table and cannot currently be shrunk in place.
--- (SmallArray#, however, can be shrunk in place). These implementations copy
+-- (SmallArray#, however, can be shrunk in place.) These implementations copy
 -- the array rather than freezing it in place. But at least they are able to
 -- avoid assigning all of the elements to a nonsense value before replacing
 -- them with memcpy.
