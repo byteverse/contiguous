@@ -866,6 +866,7 @@ instance Contiguous SmallArray where
   shrink !arr !n = do
     shrinkSmallMutableArray arr n
     pure arr
+  {-# INLINE unsafeShrinkAndFreeze #-}
   unsafeShrinkAndFreeze !arr !n = do
     shrinkSmallMutableArray arr n
     unsafeFreezeSmallArray arr
