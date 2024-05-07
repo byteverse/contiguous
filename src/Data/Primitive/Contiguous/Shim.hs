@@ -39,7 +39,7 @@ resizeUnliftedArray !src !sz = do
     LT -> cloneMutableUnliftedArray src 0 sz
     GT -> do
       dst <- unsafeNewUnliftedArray sz
-      copyMutableUnliftedArray dst 0 src 0 sz
+      copyMutableUnliftedArray dst 0 src 0 srcSz
       pure dst
 {-# INLINE resizeUnliftedArray #-}
 
