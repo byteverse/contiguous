@@ -27,7 +27,7 @@ resizeArray !src !sz = do
     LT -> cloneMutableArray src 0 sz
     GT -> do
       dst <- newArray sz errorThunk
-      copyMutableArray dst 0 src 0 sz
+      copyMutableArray dst 0 src 0 srcSz
       pure dst
 {-# INLINE resizeArray #-}
 
