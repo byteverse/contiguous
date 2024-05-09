@@ -27,7 +27,7 @@ module Data.Primitive.Contiguous.Class
   , Always
   ) where
 
-import Data.Primitive hiding (fromList, fromListN)
+import Data.Primitive
 import Data.Primitive.Contiguous.Shim
 import Data.Primitive.Unlifted.Array
 import Prelude hiding
@@ -139,7 +139,7 @@ class Contiguous (arr :: Type -> Type) where
     b -> -- fill element
     m (Mutable arr (PrimState m) b)
 
-  -- | Resize an array without growing it.
+  -- | Resize an array without growing it. It may be shrunk in place.
   --
   -- @since 0.6.0
   shrink ::
@@ -148,16 +148,6 @@ class Contiguous (arr :: Type -> Type) where
     -- | new length
     Int ->
     m (Mutable arr (PrimState m) a)
-  default shrink ::
-    ( ContiguousU arr
-    , PrimMonad m
-    , Element arr a
-    ) =>
-    Mutable arr (PrimState m) a ->
-    Int ->
-    m (Mutable arr (PrimState m) a)
-  {-# INLINE shrink #-}
-  shrink = resize
 
   -- | The empty array.
   empty :: arr a
@@ -380,8 +370,6 @@ class Contiguous (arr :: Type -> Type) where
     (PrimMonad m, Element arr b) =>
     Mutable arr (PrimState m) b ->
     m (arr b)
-  unsafeFreeze xs = unsafeShrinkAndFreeze xs =<< sizeMut xs
-  {-# INLINE unsafeFreeze #-}
 
   unsafeShrinkAndFreeze ::
     (PrimMonad m, Element arr a) =>
@@ -389,17 +377,6 @@ class Contiguous (arr :: Type -> Type) where
     -- | final size
     Int ->
     m (arr a)
-  default unsafeShrinkAndFreeze ::
-    ( ContiguousU arr
-    , PrimMonad m
-    , Element arr a
-    ) =>
-    Mutable arr (PrimState m) a ->
-    Int ->
-    m (arr a)
-  {-# INLINE unsafeShrinkAndFreeze #-}
-  unsafeShrinkAndFreeze arr0 len' =
-    resize arr0 len' >>= unsafeFreeze
 
   -- | Copy a slice of an immutable array into a new mutable array.
   thaw ::
@@ -569,7 +546,13 @@ class (Contiguous arr) => ContiguousU arr where
   -- | The unifted version of the mutable array type (i.e. eliminates an indirection through a thunk).
   type UnliftedMut arr = (r :: Type -> Type -> TYPE UnliftedRep) | r -> arr
 
-  -- | Resize an array into one with the given size.
+  -- | Resize an array into one with the given size. If the array is grown,
+  -- then reading from any newly introduced element before writing to it is undefined behavior.
+  -- The current behavior is that anything backed by @MutableByteArray#@ ends with
+  -- uninitialized memory at these indices. But for @SmallMutableArray@ or @Array@, these
+  -- are set to an error thunk, so reading from them and forcing the result
+  -- causes the program to crash. For @UnliftedArray@, the new elements have undefined values of an unknown type.
+  -- If the array is not grown, it may (or may not) be modified in place.
   resize ::
     (PrimMonad m, Element arr b) =>
     Mutable arr (PrimState m) b ->
@@ -618,6 +601,10 @@ instance (ContiguousU arr) => Contiguous (Slice arr) where
   replicateMut len x = do
     baseMut <- replicateMut len x
     pure MutableSlice {offsetMut = 0, lengthMut = len, baseMut = unliftMut baseMut}
+  {-# INLINE unsafeFreeze #-}
+  unsafeFreeze (MutableSlice off len base) = do
+    base' <- unsafeFreeze (liftMut base)
+    pure (Slice off len (unlift base'))
   {-# INLINE shrink #-}
   shrink xs len' = pure $ case compare len' (lengthMut xs) of
     LT -> xs {lengthMut = len'}
@@ -807,7 +794,7 @@ instance Contiguous SmallArray where
   {-# INLINE size #-}
   size = sizeofSmallArray
   {-# INLINE sizeMut #-}
-  sizeMut = (\x -> pure $! sizeofSmallMutableArray x)
+  sizeMut = getSizeofSmallMutableArray
   {-# INLINE thaw_ #-}
   thaw_ = thawSmallArray
   {-# INLINE equals #-}
@@ -872,15 +859,23 @@ instance Contiguous SmallArray where
   {-# INLINE copyMut_ #-}
   copyMut_ = copySmallMutableArray
   {-# INLINE replicateMut #-}
-  replicateMut = replicateSmallMutableArray
+  replicateMut = newSmallArray
   {-# INLINE run #-}
   run = runSmallArrayST
+  {-# INLINE shrink #-}
+  shrink !arr !n = do
+    shrinkSmallMutableArray arr n
+    pure arr
+  {-# INLINE unsafeShrinkAndFreeze #-}
+  unsafeShrinkAndFreeze !arr !n = do
+    shrinkSmallMutableArray arr n
+    unsafeFreezeSmallArray arr
 
 instance ContiguousU SmallArray where
   type Unlifted SmallArray = SmallArray#
   type UnliftedMut SmallArray = SmallMutableArray#
   {-# INLINE resize #-}
-  resize = resizeSmallArray
+  resize !arr !n = resizeSmallMutableArray arr n resizeSmallMutableArrayUninitializedElement
   {-# INLINE unlift #-}
   unlift (SmallArray x) = x
   {-# INLINE unliftMut #-}
@@ -926,7 +921,7 @@ instance Contiguous PrimArray where
     lengthMut <- sizeMut baseMut
     pure MutableSlice {offsetMut = 0, lengthMut, baseMut = unliftMut baseMut}
   {-# INLINE freeze_ #-}
-  freeze_ = freezePrimArrayShim
+  freeze_ = freezePrimArray
   {-# INLINE unsafeFreeze #-}
   unsafeFreeze = unsafeFreezePrimArray
   {-# INLINE thaw_ #-}
@@ -936,9 +931,9 @@ instance Contiguous PrimArray where
   {-# INLINE copyMut_ #-}
   copyMut_ = copyMutablePrimArray
   {-# INLINE clone_ #-}
-  clone_ = clonePrimArrayShim
+  clone_ = clonePrimArray
   {-# INLINE cloneMut_ #-}
-  cloneMut_ = cloneMutablePrimArrayShim
+  cloneMut_ = cloneMutablePrimArray
   {-# INLINE equals #-}
   equals = (==)
   {-# INLINE null #-}
@@ -1003,6 +998,14 @@ instance Contiguous PrimArray where
     unsafeFreeze dst
   {-# INLINE run #-}
   run = runPrimArrayST
+  {-# INLINE shrink #-}
+  shrink !arr !n = do
+    shrinkMutablePrimArray arr n
+    pure arr
+  {-# INLINE unsafeShrinkAndFreeze #-}
+  unsafeShrinkAndFreeze !arr !n = do
+    shrinkMutablePrimArray arr n
+    unsafeFreezePrimArray arr
 
 newtype PrimArray# a = PrimArray# ByteArray#
 newtype MutablePrimArray# s a = MutablePrimArray# (MutableByteArray# s)
@@ -1127,6 +1130,14 @@ instance Contiguous Array where
     unsafeFreezeArray m
   {-# INLINE run #-}
   run = runArrayST
+  {-# INLINE shrink #-}
+  shrink !arr !n = do
+    -- See Note [Shrinking Arrays Without a Shrink Primop]
+    cloneMutableArray arr 0 n
+  {-# INLINE unsafeShrinkAndFreeze #-}
+  unsafeShrinkAndFreeze !arr !n =
+    -- See Note [Shrinking Arrays Without a Shrink Primop]
+    freezeArray arr 0 n
 
 instance ContiguousU Array where
   type Unlifted Array = Array#
@@ -1250,6 +1261,22 @@ instance Contiguous (UnliftedArray_ unlifted_a) where
     unsafeFreezeUnliftedArray m
   {-# INLINE run #-}
   run = runUnliftedArrayST
+  {-# INLINE shrink #-}
+  shrink !arr !n = do
+    -- See Note [Shrinking Arrays Without a Shrink Primop]
+    cloneMutableUnliftedArray arr 0 n
+  {-# INLINE unsafeShrinkAndFreeze #-}
+  unsafeShrinkAndFreeze !arr !n =
+    -- See Note [Shrinking Arrays Without a Shrink Primop]
+    freezeUnliftedArray arr 0 n
+
+-- Note [Shrinking Arrays Without a Shrink Primop]
+-- ===============================================
+-- GHC's Array# type has a card table and cannot currently be shrunk in place.
+-- (SmallArray#, however, can be shrunk in place.) These implementations copy
+-- the array rather than freezing it in place. But at least they are able to
+-- avoid assigning all of the elements to a nonsense value before replacing
+-- them with memcpy.
 
 newtype UnliftedArray## (u :: TYPE UnliftedRep) (a :: Type)
   = UnliftedArray## (Exts.Array# u)
@@ -1269,3 +1296,7 @@ instance ContiguousU (UnliftedArray_ unlifted_a) where
   lift (UnliftedArray## x) = UnliftedArray (UnliftedArray# x)
   {-# INLINE liftMut #-}
   liftMut (MutableUnliftedArray## x) = MutableUnliftedArray (MutableUnliftedArray# x)
+
+resizeSmallMutableArrayUninitializedElement :: a
+{-# noinline resizeSmallMutableArrayUninitializedElement #-}
+resizeSmallMutableArrayUninitializedElement = errorWithoutStackTrace "uninitialized element of resizeSmallMutableArray"

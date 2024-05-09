@@ -273,7 +273,7 @@ module Data.Primitive.Contiguous
   ) where
 
 import Control.Monad.Primitive
-import Data.Primitive hiding (fromList, fromListN)
+import Data.Primitive
 import Data.Primitive.Unlifted.Array
 import Prelude hiding (Foldable (..), all, any, filter, map, mapM, mapM_, read, replicate, reverse, scanl, sequence, sequence_, traverse, zip, zipWith, (<$))
 
