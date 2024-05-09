@@ -139,7 +139,7 @@ class Contiguous (arr :: Type -> Type) where
     b -> -- fill element
     m (Mutable arr (PrimState m) b)
 
-  -- | Resize an array without growing it.
+  -- | Resize an array without growing it. It may be shrunk in place.
   --
   -- @since 0.6.0
   shrink ::
