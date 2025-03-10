@@ -5,11 +5,13 @@ module Data.Primitive.Contiguous.Shim
   ( errorThunk
   , resizeArray
   , resizeUnliftedArray
+  , resizeSmallUnliftedArray
   , replicateMutablePrimArray
   ) where
 
 import Data.Primitive
 import Data.Primitive.Unlifted.Array
+import Data.Primitive.Unlifted.SmallArray
 import Prelude hiding (all, any, elem, filter, foldMap, foldl, foldr, map, mapM, mapM_, maximum, minimum, null, read, replicate, reverse, scanl, sequence, sequence_, traverse, zip, zipWith, (<$))
 
 import Control.Monad.Primitive (PrimMonad (..), PrimState)
@@ -42,6 +44,19 @@ resizeUnliftedArray !src !sz = do
       copyMutableUnliftedArray dst 0 src 0 srcSz
       pure dst
 {-# INLINE resizeUnliftedArray #-}
+
+resizeSmallUnliftedArray :: (PrimMonad m, PrimUnlifted a) => SmallMutableUnliftedArray (PrimState m) a -> Int -> m (SmallMutableUnliftedArray (PrimState m) a)
+resizeSmallUnliftedArray !src !sz = do
+  srcSz <- getSizeofSmallMutableUnliftedArray src
+  case compare sz srcSz of
+    EQ -> pure src
+    LT -> cloneSmallMutableUnliftedArray src 0 sz
+    GT -> do
+      dst <- unsafeNewSmallUnliftedArray sz
+      copySmallMutableUnliftedArray dst 0 src 0 srcSz
+      pure dst
+{-# INLINE resizeSmallUnliftedArray #-}
+
 
 replicateMutablePrimArray ::
   (PrimMonad m, Prim a) =>

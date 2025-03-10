@@ -270,11 +270,14 @@ module Data.Primitive.Contiguous
   , MutablePrimArray
   , UnliftedArray
   , MutableUnliftedArray
+  , SmallUnliftedArray
+  , SmallMutableUnliftedArray
   ) where
 
 import Control.Monad.Primitive
 import Data.Primitive
 import Data.Primitive.Unlifted.Array
+import Data.Primitive.Unlifted.SmallArray
 import Prelude hiding (Foldable (..), all, any, filter, map, mapM, mapM_, read, replicate, reverse, scanl, sequence, sequence_, traverse, zip, zipWith, (<$))
 
 import Control.Monad (when)

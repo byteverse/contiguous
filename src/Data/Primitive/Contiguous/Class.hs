@@ -30,6 +30,7 @@ module Data.Primitive.Contiguous.Class
 import Data.Primitive
 import Data.Primitive.Contiguous.Shim
 import Data.Primitive.Unlifted.Array
+import Data.Primitive.Unlifted.SmallArray
 import Prelude hiding
   ( all
   , any
@@ -64,8 +65,10 @@ import Control.Monad.ST.Run (runArrayST, runPrimArrayST, runSmallArrayST, runUnl
 import Data.Kind (Type)
 import Data.Primitive.Unlifted.Array ()
 import Data.Primitive.Unlifted.Array.Primops (MutableUnliftedArray# (MutableUnliftedArray#), UnliftedArray# (UnliftedArray#))
+import Data.Primitive.Unlifted.SmallArray.Primops (SmallUnliftedArray# (SmallUnliftedArray#), SmallMutableUnliftedArray# (SmallMutableUnliftedArray#))
 import Data.Primitive.Unlifted.Class (PrimUnlifted)
 import GHC.Exts (Array#, Constraint, MutableArray#, SmallArray#, SmallMutableArray#, TYPE, sizeofArray#, sizeofByteArray#)
+import GHC.ST (ST (ST))
 
 import qualified Control.DeepSeq as DS
 import qualified Data.Primitive.Unlifted.Class as Class
@@ -884,6 +887,150 @@ instance ContiguousU SmallArray where
   lift x = SmallArray x
   {-# INLINE liftMut #-}
   liftMut x = SmallMutableArray x
+
+instance Contiguous (SmallUnliftedArray_ unlifted_a) where
+  type Mutable (SmallUnliftedArray_ unlifted_a) = SmallMutableUnliftedArray_ unlifted_a
+  type Element (SmallUnliftedArray_ unlifted_a) = PrimUnliftsInto unlifted_a
+  type Sliced (SmallUnliftedArray_ unlifted_a) = Slice (SmallUnliftedArray_ unlifted_a)
+  type MutableSliced (SmallUnliftedArray_ unlifted_a) = MutableSlice (SmallUnliftedArray_ unlifted_a)
+  {-# INLINE new #-}
+  new n = unsafeNewSmallUnliftedArray n
+  {-# INLINE empty #-}
+  empty = emptySmallUnliftedArray
+  {-# INLINE index #-}
+  index = indexSmallUnliftedArray
+  {-# INLINE indexM #-}
+  indexM arr ix = pure (indexSmallUnliftedArray arr ix)
+  {-# INLINE index# #-}
+  index# arr ix = (# indexSmallUnliftedArray arr ix #)
+  {-# INLINE read #-}
+  read = readSmallUnliftedArray
+  {-# INLINE write #-}
+  write = writeSmallUnliftedArray
+  {-# INLINE null #-}
+  null a = case sizeofSmallUnliftedArray a of
+    0 -> True
+    _ -> False
+  {-# INLINE slice #-}
+  slice base offset length = Slice {offset, length, base = unlift base}
+  {-# INLINE sliceMut #-}
+  sliceMut baseMut offsetMut lengthMut = MutableSlice {offsetMut, lengthMut, baseMut = unliftMut baseMut}
+  {-# INLINE toSlice #-}
+  toSlice base = Slice {offset = 0, length = size base, base = unlift base}
+  {-# INLINE toSliceMut #-}
+  toSliceMut baseMut = do
+    lengthMut <- sizeMut baseMut
+    pure MutableSlice {offsetMut = 0, lengthMut, baseMut = unliftMut baseMut}
+  {-# INLINE freeze_ #-}
+  freeze_ = freezeSmallUnliftedArray
+  {-# INLINE unsafeFreeze #-}
+  unsafeFreeze = unsafeFreezeSmallUnliftedArray
+  {-# INLINE size #-}
+  size = sizeofSmallUnliftedArray
+  {-# INLINE sizeMut #-}
+  sizeMut = getSizeofSmallMutableUnliftedArray
+  {-# INLINE thaw_ #-}
+  thaw_ = thawSmallUnliftedArray
+  {-# INLINE equals #-}
+  equals = (==)
+  {-# INLINE equalsMut #-}
+  equalsMut = sameSmallMutableUnliftedArray
+  {-# INLINE singleton #-}
+  singleton a = runST $ do
+    marr <- newSmallUnliftedArray 1 a
+    unsafeFreezeSmallUnliftedArray marr
+  {-# INLINE doubleton #-}
+  doubleton a b = runST $ do
+    m <- newSmallUnliftedArray 2 a
+    writeSmallUnliftedArray m 1 b
+    unsafeFreezeSmallUnliftedArray m
+  {-# INLINE tripleton #-}
+  tripleton a b c = runST $ do
+    m <- newSmallUnliftedArray 3 a
+    writeSmallUnliftedArray m 1 b
+    writeSmallUnliftedArray m 2 c
+    unsafeFreezeSmallUnliftedArray m
+  {-# INLINE quadrupleton #-}
+  quadrupleton a b c d = runST $ do
+    m <- newSmallUnliftedArray 4 a
+    writeSmallUnliftedArray m 1 b
+    writeSmallUnliftedArray m 2 c
+    writeSmallUnliftedArray m 3 d
+    unsafeFreezeSmallUnliftedArray m
+  {-# INLINE quintupleton #-}
+  quintupleton a b c d e = runST $ do
+    m <- newSmallUnliftedArray 5 a
+    writeSmallUnliftedArray m 1 b
+    writeSmallUnliftedArray m 2 c
+    writeSmallUnliftedArray m 3 d
+    writeSmallUnliftedArray m 4 e
+    unsafeFreezeSmallUnliftedArray m
+  {-# INLINE sextupleton #-}
+  sextupleton a b c d e f = runST $ do
+    m <- newSmallUnliftedArray 6 a
+    writeSmallUnliftedArray m 1 b
+    writeSmallUnliftedArray m 2 c
+    writeSmallUnliftedArray m 3 d
+    writeSmallUnliftedArray m 4 e
+    writeSmallUnliftedArray m 5 f
+    unsafeFreezeSmallUnliftedArray m
+  {-# INLINE rnf #-}
+  rnf !ary =
+    let !sz = sizeofSmallUnliftedArray ary
+        go !ix =
+          if ix < sz
+            then
+              let !x = indexSmallUnliftedArray ary ix
+               in DS.rnf x `seq` go (ix + 1)
+            else ()
+     in go 0
+  {-# INLINE clone_ #-}
+  clone_ = cloneSmallUnliftedArray
+  {-# INLINE cloneMut_ #-}
+  cloneMut_ = cloneSmallMutableUnliftedArray
+  {-# INLINE copy_ #-}
+  copy_ = copySmallUnliftedArray
+  {-# INLINE copyMut_ #-}
+  copyMut_ = copySmallMutableUnliftedArray
+  {-# INLINE replicateMut #-}
+  replicateMut = newSmallUnliftedArray
+  {-# INLINE run #-}
+  run = runSmallUnliftedArrayST
+  {-# INLINE shrink #-}
+  shrink !arr !n = do
+    shrinkSmallMutableUnliftedArray arr n
+    pure arr
+  {-# INLINE unsafeShrinkAndFreeze #-}
+  unsafeShrinkAndFreeze !arr !n = do
+    shrinkSmallMutableUnliftedArray arr n
+    unsafeFreezeSmallUnliftedArray arr
+
+
+newtype SmallUnliftedArray## (u :: TYPE UnliftedRep) (a :: Type)
+  = SmallUnliftedArray## (Exts.SmallArray# u)
+newtype SmallMutableUnliftedArray## (u :: TYPE UnliftedRep) s (a :: Type)
+  = SmallMutableUnliftedArray## (Exts.SmallMutableArray# s u)
+
+instance ContiguousU (SmallUnliftedArray_ unlifted_a) where
+  type Unlifted (SmallUnliftedArray_ unlifted_a) = SmallUnliftedArray## unlifted_a
+  type UnliftedMut (SmallUnliftedArray_ unlifted_a) = SmallMutableUnliftedArray## unlifted_a
+  {-# INLINE resize #-}
+  resize = resizeSmallUnliftedArray
+  {-# INLINE unlift #-}
+  unlift (SmallUnliftedArray (SmallUnliftedArray# x)) = SmallUnliftedArray## x
+  {-# INLINE unliftMut #-}
+  unliftMut (SmallMutableUnliftedArray (SmallMutableUnliftedArray# x)) = SmallMutableUnliftedArray## x
+  {-# INLINE lift #-}
+  lift (SmallUnliftedArray## x) = SmallUnliftedArray (SmallUnliftedArray# x)
+  {-# INLINE liftMut #-}
+  liftMut (SmallMutableUnliftedArray## x) = SmallMutableUnliftedArray (SmallMutableUnliftedArray# x)
+
+
+-- NOTE: Currently missing from the `run-st` library
+-- c.f. https://github.com/byteverse/run-st/issues/5
+runSmallUnliftedArrayST :: (forall s. ST s (SmallUnliftedArray_ unlifted_a a)) -> SmallUnliftedArray_ unlifted_a a
+{-# INLINE runSmallUnliftedArrayST #-}
+runSmallUnliftedArrayST f = SmallUnliftedArray (Exts.runRW# (\s0 -> case f of ST g -> case g s0 of (# _, SmallUnliftedArray r #) -> r))
 
 instance Contiguous PrimArray where
   type Mutable PrimArray = MutablePrimArray
