@@ -1,5 +1,14 @@
 # Revision history for contiguous
 
+## 0.6.5.0 -- 2025-04-07
+
+* Implement Contiguous and ContiguousU for SmallUnliftedArray
+* Re-export Small(Mutable)UnliftedArray from Data.Primitive.Contiguous
+* Use functions from newer primitive and primitive-unlifted. The implementation
+  of UnliftedArray in primitive-unlifted-2.1 penalizes the creation of an
+  uninitialized unlifted array. When shrinking and resizing unlifted arrays,
+  there are primitives that we can use to avoid this.
+
 ## 0.6.4.2 -- 2024-02-06
 
 * Restore support for versions of base that do not export `liftA2`
